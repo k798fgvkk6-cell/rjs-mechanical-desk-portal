@@ -1,0 +1,6 @@
+{
+  "name": "Ryan Jade Mechanical Trading Desk Portal",
+  "description": "Institutional student terminal for mechanical trading execution, November risk defense calendar, video vault curriculum, and NAS100 execution audit logger.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
