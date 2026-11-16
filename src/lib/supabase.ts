@@ -10,6 +10,7 @@ export type StudentTier = 'phase1' | 'phase2' | 'pro';
 export interface StudentSession {
   id: string;
   full_name: string;
+  email?: string | null;
   tier: StudentTier | string;
   is_active: boolean;
   unlocked_lessons: string[];

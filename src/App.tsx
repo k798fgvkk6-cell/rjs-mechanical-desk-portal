@@ -28,13 +28,15 @@ import {
   Sun,
   Moon,
   ClipboardCheck,
-  CandlestickChart
+  CandlestickChart,
+  Users
 } from 'lucide-react';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import { supabase, StudentSession } from './lib/supabase';
 import { QuizzesTab } from './components/QuizzesTab';
 import { SimulatorTab } from './components/SimulatorTab';
 import { TraderProgressRail } from './components/TraderProgressRail';
+import { AdminStudentManagerModal } from './components/AdminStudentManagerModal';
 import {
   DEFAULT_TIER_STATS,
   SimulatorDifficulty,
@@ -843,6 +845,19 @@ export default function App() {
   const [accessDeniedAlert, setAccessDeniedAlert] = useState<string | null>(null);
   const [tierRestrictedNotice, setTierRestrictedNotice] = useState<string | null>(null);
   const [worksheetModalOpen, setWorksheetModalOpen] = useState<boolean>(false);
+  const [adminModalOpen, setAdminModalOpen] = useState<boolean>(false);
+  const [adminToast, setAdminToast] = useState<{ id: number; type: 'success' | 'error'; message: string } | null>(null);
+  const adminToastTimerRef = useRef<number | null>(null);
+
+  const showAdminToast = (type: 'success' | 'error', message: string) => {
+    if (adminToastTimerRef.current) {
+      window.clearTimeout(adminToastTimerRef.current);
+    }
+    setAdminToast({ id: Date.now(), type, message });
+    adminToastTimerRef.current = window.setTimeout(() => {
+      setAdminToast(null);
+    }, 3800);
+  };
 
   // Quizzes Tab Progress (Per-Student LocalStorage + Supabase Cloud Sync)
   const QUIZ_STORAGE_KEY_PREFIX = 'rjs_quiz_progress_';
@@ -1098,6 +1113,7 @@ export default function App() {
                   const refreshed: StudentSession = {
                     id: freshStudent.id,
                     full_name: freshStudent.full_name,
+                    email: freshStudent.email ?? null,
                     tier: freshStudent.tier || 'phase1',
                     is_active: freshStudent.is_active,
                     unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
@@ -1164,61 +1180,101 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Refresh student tier/profile from Supabase when tab regains focus so Phase 2 upgrades apply immediately
+  // Sync student tier/profile from Supabase in real time (Realtime subscription + focus + 15s fallback)
   useEffect(() => {
     const sid = currentStudent?.id;
     if (!sid || !isAuthenticated) return;
     let lastCheckedAt = 0;
 
-    const syncTierOnFocus = () => {
-      if (document.visibilityState === 'hidden') return;
+    const applyFreshStudent = (freshStudent: any) => {
+      if (!freshStudent) return;
+      if (freshStudent.is_active === false) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(STUDENT_SESSION_KEY);
+        setIsAuthenticated(false);
+        setCurrentStudent(null);
+        return;
+      }
+
+      const refreshed: StudentSession = {
+        id: freshStudent.id,
+        full_name: freshStudent.full_name,
+        email: freshStudent.email ?? null,
+        tier: freshStudent.tier || 'phase1',
+        is_active: freshStudent.is_active,
+        unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
+        passcode: freshStudent.passcode,
+        created_at: freshStudent.created_at
+      };
+      setCurrentStudent(refreshed);
+      localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(refreshed));
+      const cloudLessonIds = extractLessonIdsFromCloud(refreshed.unlocked_lessons);
+      if (cloudLessonIds.length > 0) {
+        setUnlockedKeywords(prev => {
+          const merged = Array.from(new Set([...prev, ...cloudLessonIds]));
+          localStorage.setItem(KEYWORDS_STORAGE_KEY, JSON.stringify(merged));
+          return merged;
+        });
+      }
+      setQuizProgress(prev => {
+        const merged = mergeQuizProgress(prev, extractQuizProgressFromCloud(refreshed.unlocked_lessons));
+        try {
+          localStorage.setItem(`${QUIZ_STORAGE_KEY_PREFIX}${refreshed.id}`, JSON.stringify(merged));
+        } catch {}
+        return merged;
+      });
+    };
+
+    const syncTierFromCloud = (force = false) => {
+      if (!force && document.visibilityState === 'hidden') return;
       const now = Date.now();
-      if (now - lastCheckedAt < 3000) return;
+      if (!force && now - lastCheckedAt < 3000) return;
       lastCheckedAt = now;
 
       supabase
         .from('students')
         .select('*')
         .eq('id', sid)
-        .eq('is_active', true)
         .maybeSingle()
         .then(({ data: freshStudent, error }) => {
           if (freshStudent && !error) {
-            const refreshed: StudentSession = {
-              id: freshStudent.id,
-              full_name: freshStudent.full_name,
-              tier: freshStudent.tier || 'phase1',
-              is_active: freshStudent.is_active,
-              unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
-              passcode: freshStudent.passcode,
-              created_at: freshStudent.created_at
-            };
-            setCurrentStudent(refreshed);
-            localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(refreshed));
-            const cloudLessonIds = extractLessonIdsFromCloud(refreshed.unlocked_lessons);
-            if (cloudLessonIds.length > 0) {
-              setUnlockedKeywords(prev => {
-                const merged = Array.from(new Set([...prev, ...cloudLessonIds]));
-                localStorage.setItem(KEYWORDS_STORAGE_KEY, JSON.stringify(merged));
-                return merged;
-              });
-            }
-            setQuizProgress(prev => {
-              const merged = mergeQuizProgress(prev, extractQuizProgressFromCloud(refreshed.unlocked_lessons));
-              try {
-                localStorage.setItem(`${QUIZ_STORAGE_KEY_PREFIX}${refreshed.id}`, JSON.stringify(merged));
-              } catch {}
-              return merged;
-            });
+            applyFreshStudent(freshStudent);
           }
         });
     };
 
-    window.addEventListener('focus', syncTierOnFocus);
-    document.addEventListener('visibilitychange', syncTierOnFocus);
+    const channel = supabase
+      .channel(`student-tier-sync-${sid}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'students',
+          filter: `id=eq.${sid}`
+        },
+        (payload) => {
+          if (payload?.new) {
+            applyFreshStudent(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    const handleVisibilityOrFocus = () => syncTierFromCloud(false);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    const pollInterval = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') {
+        syncTierFromCloud(true);
+      }
+    }, 15000);
+
     return () => {
-      window.removeEventListener('focus', syncTierOnFocus);
-      document.removeEventListener('visibilitychange', syncTierOnFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.clearInterval(pollInterval);
+      supabase.removeChannel(channel);
     };
   }, [currentStudent?.id, isAuthenticated]);
 
@@ -1371,6 +1427,7 @@ export default function App() {
       const sessionData: StudentSession = {
         id: student.id,
         full_name: student.full_name,
+        email: student.email ?? null,
         tier: student.tier || 'phase1',
         is_active: student.is_active,
         unlocked_lessons: Array.isArray(student.unlocked_lessons) ? student.unlocked_lessons : [],
@@ -1427,6 +1484,8 @@ export default function App() {
     setPasscodeKey('');
     setAuthError(false);
     setTierRestrictedNotice(null);
+    setAdminModalOpen(false);
+    setAdminToast(null);
     playTone(400, 'sine', 0.08);
   };
 
@@ -2401,6 +2460,22 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Admin-Only Student Access Manager Button (Strictly Ryan Jade MASTER) */}
+            {isMasterAccount && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminModalOpen(true);
+                  playTone(620, 'sine', 0.04);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:text-white hover:bg-amber-500/25 hover:border-amber-400 font-mono text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Master Admin: Manage Student Phase 1 / Phase 2 Access"
+              >
+                <Users className="w-3.5 h-3.5 text-amber-400" />
+                <span>ADMIN: STUDENTS</span>
+              </button>
+            )}
 
             {/* Sleek LOG OUT Button in Top Nav */}
             <button
@@ -4316,6 +4391,40 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ADMIN-ONLY: STUDENT ACCESS MANAGER MODAL (STRICTLY MASTER ACCOUNT) */}
+      {isMasterAccount && (
+        <AdminStudentManagerModal
+          isOpen={adminModalOpen}
+          onClose={() => setAdminModalOpen(false)}
+          phase1LessonIds={PHASE_1_LESSONS.map((l) => l.id)}
+          phase2LessonIds={PHASE_2_LESSONS.filter((l) => l.duration.toUpperCase() !== 'TBD').map((l) => l.id)}
+          isMasterAccountFn={isMasterOrAdminAccount}
+          onToast={showAdminToast}
+          onPlaySuccess={playSuccessChime}
+          onPlayError={playErrorTone}
+          onPlayTone={playTone}
+        />
+      )}
+
+      {/* INSTANT TOAST CONFIRMATION */}
+      {adminToast && (
+        <div
+          key={adminToast.id}
+          className={`fixed bottom-5 right-5 z-[60] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all ${
+            adminToast.type === 'success'
+              ? 'border-emerald-500/60 text-emerald-300'
+              : 'border-rose-500/60 text-rose-300'
+          }`}
+        >
+          {adminToast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          )}
+          <span>{adminToast.message}</span>
         </div>
       )}
 

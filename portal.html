@@ -515,6 +515,20 @@
             <span id="headerTierText">TIER: PRO VIP</span>
           </div>
 
+          <!-- Admin-Only Student Access Manager Button (Strictly Ryan Jade MASTER) -->
+          <button
+            id="btnAdminStudents"
+            type="button"
+            onclick="openAdminStudentsModal()"
+            class="hidden px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:text-white hover:bg-amber-500/25 hover:border-amber-400 font-mono text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Master Admin: Manage Student Phase 1 / Phase 2 Access"
+          >
+            <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <span>ADMIN: STUDENTS</span>
+          </button>
+
           <!-- Sleek LOG OUT Button in Header -->
           <button 
             id="btnHeaderLogout" 
@@ -1599,6 +1613,107 @@
   </div>
 
   <!-- ============================================================== -->
+  <!-- MODAL: ADMIN-ONLY STUDENT ACCESS MANAGER (MASTER ONLY)         -->
+  <!-- ============================================================== -->
+  <div id="adminStudentsModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm" onclick="if (event.target === this) closeAdminStudentsModal()">
+    <div class="glass-card max-w-4xl w-full rounded-2xl p-5 sm:p-6 border border-amber-500/35 shadow-[0_0_50px_rgba(245,158,11,0.12)] max-h-[90vh] flex flex-col">
+      <!-- Header -->
+      <div class="flex items-start justify-between gap-4 pb-4 border-b border-hairline shrink-0">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center text-amber-400 shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-base sm:text-lg font-bold text-white uppercase tracking-wide">
+                ADMIN // STUDENT ACCESS MANAGER
+              </h3>
+              <span class="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/35 text-amber-300 font-mono text-[10px] font-bold">
+                MASTER ONLY
+              </span>
+            </div>
+            <p class="text-xs font-mono text-slate-400 mt-0.5">
+              Live Supabase roster · Flip any student between PHASE 1 and PHASE 2 SETTLED to sync access across all devices.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            id="btnAdminRefresh"
+            type="button"
+            onclick="playTone(560, 'sine', 0.03); fetchAdminStudentRoster();"
+            class="px-3 py-1.5 rounded-lg bg-[#0e131e] border border-hairline hover:border-slate-500 text-slate-300 hover:text-white font-mono text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <svg id="adminRefreshIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span class="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            type="button"
+            onclick="closeAdminStudentsModal()"
+            class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors cursor-pointer"
+            aria-label="Close Student Access Manager"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Metrics & Filters Bar -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3 py-4 border-b border-hairline shrink-0">
+        <div class="md:col-span-5 grid grid-cols-3 gap-2">
+          <div class="px-3 py-2 rounded-lg bg-[#070a12] border border-hairline">
+            <div class="text-[10px] font-mono uppercase text-slate-400">Enrolled</div>
+            <div id="adminCountTotal" class="text-base font-mono font-bold text-white num-mono">0</div>
+          </div>
+          <div class="px-3 py-2 rounded-lg bg-[#070a12] border border-hairline">
+            <div class="text-[10px] font-mono uppercase text-slate-400">Phase 1</div>
+            <div id="adminCountPhase1" class="text-base font-mono font-bold text-emerald-400 num-mono">0</div>
+          </div>
+          <div class="px-3 py-2 rounded-lg bg-[#070a12] border border-hairline">
+            <div class="text-[10px] font-mono uppercase text-slate-400">Phase 2</div>
+            <div id="adminCountPhase2" class="text-base font-mono font-bold text-cyan-400 num-mono">0</div>
+          </div>
+        </div>
+
+        <div class="md:col-span-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div class="relative flex-1">
+            <svg class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              id="adminStudentSearchInput"
+              type="text"
+              oninput="setAdminStudentSearch(this.value)"
+              placeholder="Search student name or email..."
+              class="w-full bg-[#070a12] border border-hairline rounded-lg pl-8 pr-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <div class="flex items-center gap-1 p-1 rounded-lg bg-[#070a12] border border-hairline font-mono text-[11px] shrink-0">
+            <button id="adminFilterBtn-ALL" type="button" onclick="setAdminTierFilter('ALL')" class="px-2.5 py-1 rounded font-bold transition-all cursor-pointer bg-emerald-500/20 text-emerald-400 border border-emerald-500/35">ALL</button>
+            <button id="adminFilterBtn-PHASE1" type="button" onclick="setAdminTierFilter('PHASE1')" class="px-2.5 py-1 rounded font-bold transition-all cursor-pointer text-slate-400 hover:text-white">PHASE 1</button>
+            <button id="adminFilterBtn-PHASE2" type="button" onclick="setAdminTierFilter('PHASE2')" class="px-2.5 py-1 rounded font-bold transition-all cursor-pointer text-slate-400 hover:text-white">PHASE 2</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Roster Body -->
+      <div id="adminStudentsRosterBody" class="flex-1 overflow-y-auto pt-4 space-y-2.5 pr-1">
+        <!-- Populated dynamically from Supabase -->
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOATING TOAST CONFIRMATION -->
+  <div id="adminToastBanner" class="hidden fixed bottom-5 right-5 z-[60] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all"></div>
+
+  <!-- ============================================================== -->
   <!-- JAVASCRIPT TERMINAL LOGIC & PERSISTENCE                        -->
   <!-- ============================================================== -->
   <script>
@@ -1722,15 +1837,25 @@
       const textEl = document.getElementById('headerTierText');
       const lockP2 = document.getElementById('lockPhase2');
       const lockPro = document.getElementById('lockProArchives');
+      const adminBtn = document.getElementById('btnAdminStudents');
 
       const meta = getTierMeta(student?.tier, student?.full_name);
       const phase2Unlocked = hasPhase2Access(student);
       const proUnlocked = hasProAccess(student);
+      const isMaster = isMasterOrAdminAccount(student);
 
       if (nameEl) nameEl.textContent = student?.full_name || 'Enrolled Trader';
       if (badgeEl) badgeEl.className = meta.badgeClass;
       if (dotEl) dotEl.className = meta.dotClass;
       if (textEl) textEl.textContent = meta.label;
+
+      if (adminBtn) {
+        if (isMaster) adminBtn.classList.remove('hidden');
+        else adminBtn.classList.add('hidden');
+      }
+      if (!isMaster) {
+        closeAdminStudentsModal();
+      }
 
       if (lockP2) {
         if (!phase2Unlocked) lockP2.classList.remove('hidden');
@@ -1743,9 +1868,16 @@
     }
 
     function applyRefreshedStudentSession(freshStudent) {
+      if (!freshStudent) return;
+      if (freshStudent.is_active === false) {
+        handleLogout();
+        return;
+      }
+
       const refreshed = {
         id: freshStudent.id,
         full_name: freshStudent.full_name,
+        email: freshStudent.email ?? null,
         tier: freshStudent.tier || 'phase1',
         is_active: freshStudent.is_active,
         unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
@@ -1777,6 +1909,51 @@
     }
 
     let lastPortalTierSyncAt = 0;
+    let studentRealtimeChannel = null;
+    let studentTierPollInterval = null;
+
+    function cleanupStudentRealtimeSync() {
+      if (studentRealtimeChannel && supabaseClient) {
+        try {
+          supabaseClient.removeChannel(studentRealtimeChannel);
+        } catch {}
+        studentRealtimeChannel = null;
+      }
+      if (studentTierPollInterval) {
+        clearInterval(studentTierPollInterval);
+        studentTierPollInterval = null;
+      }
+    }
+
+    function setupStudentRealtimeSync(studentId) {
+      cleanupStudentRealtimeSync();
+      if (!supabaseClient || !studentId) return;
+
+      studentRealtimeChannel = supabaseClient
+        .channel(`portal-student-tier-sync-${studentId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'students',
+            filter: `id=eq.${studentId}`
+          },
+          (payload) => {
+            if (payload && payload.new) {
+              applyRefreshedStudentSession(payload.new);
+            }
+          }
+        )
+        .subscribe();
+
+      studentTierPollInterval = setInterval(() => {
+        if (document.visibilityState !== 'hidden' && currentStudentSession?.id) {
+          refreshStudentTierFromSupabase(true);
+        }
+      }, 15000);
+    }
+
     async function refreshStudentTierFromSupabase(force = false) {
       if (!supabaseClient || !currentStudentSession?.id) return;
       const now = Date.now();
@@ -1788,7 +1965,6 @@
           .from('students')
           .select('*')
           .eq('id', currentStudentSession.id)
-          .eq('is_active', true)
           .maybeSingle();
 
         if (!error && freshStudent) {
@@ -1834,8 +2010,10 @@
         mainPortalDashboard.style.display = 'flex';
 
         loadStudentTradesFromSupabase(savedSession.id);
+        setupStudentRealtimeSync(savedSession.id);
         await refreshStudentTierFromSupabase(true);
       } else {
+        cleanupStudentRealtimeSync();
         mainPortalDashboard.style.display = 'none';
         authGateOverlay.style.display = 'flex';
         authGateOverlay.classList.remove('opacity-0', 'pointer-events-none');
@@ -1870,6 +2048,7 @@
         const sessionData = {
           id: student.id,
           full_name: student.full_name,
+          email: student.email ?? null,
           tier: student.tier || 'phase1',
           is_active: student.is_active,
           unlocked_lessons: Array.isArray(student.unlocked_lessons) ? student.unlocked_lessons : [],
@@ -1889,6 +2068,7 @@
 
         authErrorMsg.classList.add('hidden');
         updateStudentHeaderUI(sessionData);
+        setupStudentRealtimeSync(student.id);
 
         const tierNotice = document.getElementById('vaultTierNotice');
         if (tierNotice) tierNotice.classList.add('hidden');
@@ -1928,6 +2108,13 @@
     }
 
     function handleLogout() {
+      cleanupStudentRealtimeSync();
+      closeAdminStudentsModal();
+      const adminBtn = document.getElementById('btnAdminStudents');
+      if (adminBtn) adminBtn.classList.add('hidden');
+      const toastEl = document.getElementById('adminToastBanner');
+      if (toastEl) toastEl.classList.add('hidden');
+
       localStorage.removeItem(AUTH_FLAG_KEY);
       localStorage.removeItem(STUDENT_SESSION_KEY);
       localStorage.removeItem(KEYWORDS_STORAGE_KEY);
@@ -1949,6 +2136,325 @@
       updateKeywordsCounter();
       playTone(400, 'sine', 0.08);
       checkAuthSession();
+    }
+
+    /* -------------------------------------------------------------
+       ADMIN-ONLY STUDENT ACCESS MANAGER (MASTER ACCOUNT ONLY)
+    -------------------------------------------------------------- */
+    let adminRosterStudents = [];
+    let adminRosterTradeSummary = {};
+    let adminRosterLoading = false;
+    let adminUpdatingStudentId = null;
+    let adminSearchQuery = '';
+    let adminTierFilter = 'ALL';
+    let adminFetchError = null;
+    let adminToastTimer = null;
+
+    function isAdminStudentSettledPhase2(student) {
+      if (!student) return false;
+      const t = String(student.tier || 'phase1').toLowerCase();
+      return t === 'phase2' || t === 'pro' || isMasterOrAdminAccount(student);
+    }
+
+    function showAdminToast(type, message) {
+      const banner = document.getElementById('adminToastBanner');
+      if (!banner) return;
+      if (adminToastTimer) clearTimeout(adminToastTimer);
+
+      const iconSvg = type === 'success'
+        ? `<svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`
+        : `<svg class="w-4 h-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`;
+
+      banner.className = `fixed bottom-5 right-5 z-[60] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all ${
+        type === 'success'
+          ? 'border-emerald-500/60 text-emerald-300'
+          : 'border-rose-500/60 text-rose-300'
+      }`;
+      banner.innerHTML = `${iconSvg}<span>${escapeQuizHtml(message)}</span>`;
+      banner.classList.remove('hidden');
+
+      adminToastTimer = setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 3800);
+    }
+
+    function openAdminStudentsModal() {
+      if (!isMasterOrAdminAccount(currentStudentSession)) return;
+      const modal = document.getElementById('adminStudentsModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      playTone(620, 'sine', 0.04);
+      fetchAdminStudentRoster();
+    }
+
+    function closeAdminStudentsModal() {
+      const modal = document.getElementById('adminStudentsModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function setAdminStudentSearch(val) {
+      adminSearchQuery = String(val || '');
+      renderAdminStudentRoster();
+    }
+
+    function setAdminTierFilter(filterVal) {
+      adminTierFilter = filterVal;
+      ['ALL', 'PHASE1', 'PHASE2'].forEach((key) => {
+        const btn = document.getElementById(`adminFilterBtn-${key}`);
+        if (!btn) return;
+        if (key === filterVal) {
+          btn.className = 'px-2.5 py-1 rounded font-bold transition-all cursor-pointer bg-emerald-500/20 text-emerald-400 border border-emerald-500/35';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded font-bold transition-all cursor-pointer text-slate-400 hover:text-white';
+        }
+      });
+      renderAdminStudentRoster();
+    }
+
+    async function fetchAdminStudentRoster() {
+      if (!supabaseClient || !isMasterOrAdminAccount(currentStudentSession)) return;
+      adminRosterLoading = true;
+      adminFetchError = null;
+      const refreshIcon = document.getElementById('adminRefreshIcon');
+      if (refreshIcon) refreshIcon.classList.add('animate-spin');
+      renderAdminStudentRoster();
+
+      try {
+        const [studentsRes, tradesRes] = await Promise.all([
+          supabaseClient
+            .from('students')
+            .select('*')
+            .order('created_at', { ascending: true }),
+          supabaseClient
+            .from('trade_logs')
+            .select('student_id, net_pnl')
+        ]);
+
+        if (studentsRes.error) throw studentsRes.error;
+
+        adminRosterStudents = (studentsRes.data || []).map((s) => ({
+          id: s.id,
+          full_name: s.full_name,
+          email: s.email ?? null,
+          tier: s.tier || 'phase1',
+          is_active: s.is_active,
+          unlocked_lessons: Array.isArray(s.unlocked_lessons) ? s.unlocked_lessons : [],
+          passcode: s.passcode,
+          created_at: s.created_at
+        }));
+
+        const summaryMap = {};
+        if (!tradesRes.error && Array.isArray(tradesRes.data)) {
+          tradesRes.data.forEach((tr) => {
+            if (!tr.student_id) return;
+            if (!summaryMap[tr.student_id]) summaryMap[tr.student_id] = { count: 0, netPnL: 0 };
+            summaryMap[tr.student_id].count += 1;
+            summaryMap[tr.student_id].netPnL += Number(tr.net_pnl) || 0;
+          });
+        }
+        adminRosterTradeSummary = summaryMap;
+      } catch (err) {
+        console.error('Admin roster fetch error:', err);
+        adminFetchError = err?.message || 'Unable to load enrolled student roster from Supabase.';
+      } finally {
+        adminRosterLoading = false;
+        if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+        renderAdminStudentRoster();
+      }
+    }
+
+    async function toggleAdminStudentTier(studentId) {
+      if (!supabaseClient || !isMasterOrAdminAccount(currentStudentSession) || adminUpdatingStudentId) return;
+      const student = adminRosterStudents.find((s) => s.id === studentId);
+      if (!student || isMasterOrAdminAccount(student)) return;
+
+      const currentlySettled = isAdminStudentSettledPhase2(student);
+      const nextTier = currentlySettled ? 'phase1' : 'phase2';
+
+      adminUpdatingStudentId = studentId;
+      playTone(620, 'sine', 0.04);
+      renderAdminStudentRoster();
+
+      try {
+        const { data: updated, error } = await supabaseClient
+          .from('students')
+          .update({ tier: nextTier })
+          .eq('id', studentId)
+          .select('*')
+          .maybeSingle();
+
+        if (error) throw error;
+
+        adminRosterStudents = adminRosterStudents.map((row) =>
+          row.id === studentId
+            ? { ...row, tier: updated?.tier || nextTier }
+            : row
+        );
+
+        playSuccessChime();
+        showAdminToast(
+          'success',
+          nextTier === 'phase2'
+            ? `${student.full_name} set to PHASE 2 SETTLED — All Phase 2 modules unlocked.`
+            : `${student.full_name} set to PHASE 1 — Phase 2 content locked.`
+        );
+      } catch (err) {
+        console.error('Supabase tier toggle error:', err);
+        playErrorTone();
+        showAdminToast(
+          'error',
+          `Failed to update tier for ${student.full_name}: ${err?.message || 'Database error'}`
+        );
+      } finally {
+        adminUpdatingStudentId = null;
+        renderAdminStudentRoster();
+      }
+    }
+
+    function renderAdminStudentRoster() {
+      const container = document.getElementById('adminStudentsRosterBody');
+      if (!container) return;
+
+      const nonMaster = adminRosterStudents.filter((s) => !isMasterOrAdminAccount(s));
+      const phase1Count = nonMaster.filter((s) => !isAdminStudentSettledPhase2(s)).length;
+      const phase2Count = nonMaster.filter((s) => isAdminStudentSettledPhase2(s)).length;
+
+      const totalEl = document.getElementById('adminCountTotal');
+      const p1El = document.getElementById('adminCountPhase1');
+      const p2El = document.getElementById('adminCountPhase2');
+      if (totalEl) totalEl.textContent = String(adminRosterStudents.length);
+      if (p1El) p1El.textContent = String(phase1Count);
+      if (p2El) p2El.textContent = String(phase2Count);
+
+      const q = adminSearchQuery.trim().toLowerCase();
+      const filtered = adminRosterStudents.filter((s) => {
+        const matchesSearch =
+          !q ||
+          String(s.full_name || '').toLowerCase().includes(q) ||
+          String(s.email || '').toLowerCase().includes(q);
+        if (!matchesSearch) return false;
+        const settled = isAdminStudentSettledPhase2(s);
+        if (adminTierFilter === 'PHASE1') return !settled;
+        if (adminTierFilter === 'PHASE2') return settled;
+        return true;
+      });
+
+      const p1Ids = CURRICULUM_DATA.phase1.map((l) => l.id);
+      const p2Ids = CURRICULUM_DATA.phase2
+        .filter((l) => String(l.duration || '').toUpperCase() !== 'TBD')
+        .map((l) => l.id);
+
+      let html = '';
+      if (adminFetchError) {
+        html += `<div class="p-3 rounded-lg bg-rose-950/35 border border-rose-500/40 text-rose-300 text-xs font-mono">${escapeQuizHtml(adminFetchError)}</div>`;
+      }
+
+      if (adminRosterLoading && adminRosterStudents.length === 0) {
+        html += `
+          <div class="py-12 flex flex-col items-center justify-center gap-2 text-slate-400 font-mono text-xs">
+            <svg class="w-6 h-6 animate-spin text-emerald-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+            <span>Loading enrolled student roster from Supabase...</span>
+          </div>
+        `;
+        container.innerHTML = html;
+        return;
+      }
+
+      if (filtered.length === 0) {
+        html += `<div class="py-10 text-center text-slate-400 font-mono text-xs border border-hairline rounded-xl bg-[#070a12]">No matching students found.</div>`;
+        container.innerHTML = html;
+        return;
+      }
+
+      html += filtered.map((student) => {
+        const isMaster = isMasterOrAdminAccount(student);
+        const settled = isAdminStudentSettledPhase2(student);
+        const isUpdating = adminUpdatingStudentId === student.id;
+
+        const lessonIds = extractLessonIdsFromCloud(student.unlocked_lessons);
+        const p1Done = p1Ids.filter((id) => lessonIds.some((u) => normalizeLessonId(u) === normalizeLessonId(id))).length;
+        const p2Done = p2Ids.filter((id) => lessonIds.some((u) => normalizeLessonId(u) === normalizeLessonId(id))).length;
+        const quizProg = extractQuizProgressFromCloud(student.unlocked_lessons);
+        const quizPassed = Array.isArray(quizProg.passedSections) ? quizProg.passedSections.length : 0;
+        const tradeStats = adminRosterTradeSummary[student.id] || { count: 0, netPnL: 0 };
+
+        const joinedLabel = student.created_at
+          ? new Date(student.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : 'Enrolled';
+        const subMeta = student.email ? student.email : `Enrolled ${joinedLabel}`;
+        const pnlSign = tradeStats.netPnL >= 0 ? '+' : '-';
+        const pnlAbs = Math.abs(Math.round(tradeStats.netPnL)).toLocaleString();
+        const pnlColor = tradeStats.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400';
+
+        const rightControlsHtml = isMaster
+          ? `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold">
+              <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <span>MASTER ADMIN</span>
+            </span>
+            <span class="text-[10px] font-mono text-slate-400">FULL ACCESS</span>
+          `
+          : `
+            ${settled
+              ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-mono text-[11px] font-bold">
+                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                   <span>PHASE 2 SETTLED</span>
+                 </span>`
+              : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 font-mono text-[11px] font-bold">
+                   <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                   <span>PHASE 1</span>
+                 </span>`
+            }
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-mono text-slate-400 uppercase hidden sm:inline">
+                ${isUpdating ? 'SAVING...' : settled ? 'PHASE 2' : 'PHASE 1'}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked="${settled ? 'true' : 'false'}"
+                aria-label="Toggle Phase 2 access for ${escapeQuizHtml(student.full_name || 'student')}"
+                ${isUpdating ? 'disabled' : ''}
+                onclick="toggleAdminStudentTier('${escapeQuizHtml(student.id)}')"
+                class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${settled ? 'bg-emerald-600 border-emerald-400' : 'bg-slate-800 border-slate-600'}"
+              >
+                <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${settled ? 'translate-x-6' : 'translate-x-1'}"></span>
+              </button>
+            </div>
+          `;
+
+        return `
+          <div class="p-3.5 sm:p-4 rounded-xl bg-[#070a12] border border-hairline flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
+            <div class="space-y-2 min-w-0 flex-1">
+              <div class="flex items-center flex-wrap gap-2">
+                <span class="w-2 h-2 rounded-full shrink-0 ${student.is_active ? 'bg-emerald-400' : 'bg-rose-400'}" title="${student.is_active ? 'Active Account' : 'Inactive Account'}"></span>
+                <span class="text-sm font-bold text-white truncate">${escapeQuizHtml(student.full_name)}</span>
+                <span class="text-[11px] font-mono text-slate-400 truncate">${escapeQuizHtml(subMeta)}</span>
+                ${!student.is_active ? `<span class="px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-500/40 text-rose-400 font-mono text-[10px] font-bold">INACTIVE</span>` : ''}
+              </div>
+              <div class="flex items-center flex-wrap gap-2 text-[11px] font-mono text-slate-400">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#0e131e] border border-hairline num-mono">
+                  <span>P1: <strong class="text-white">${p1Done}/${p1Ids.length}</strong></span>
+                </span>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#0e131e] border border-hairline num-mono">
+                  <span>P2: <strong class="text-white">${p2Done}/${p2Ids.length}</strong></span>
+                </span>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#0e131e] border border-hairline num-mono">
+                  <span>Quizzes: <strong class="text-white">${quizPassed}/4</strong></span>
+                </span>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#0e131e] border border-hairline num-mono">
+                  <span>Logs: <strong class="text-white">${tradeStats.count}</strong> (<strong class="${pnlColor}">${pnlSign}₱${pnlAbs}</strong>)</span>
+                </span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-hairline">
+              ${rightControlsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = html;
     }
 
     document.getElementById('btnSoundToggle').addEventListener('click', () => {
