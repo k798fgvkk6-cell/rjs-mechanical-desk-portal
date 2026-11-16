@@ -41,3 +41,231 @@
 .shake-error {
   animation: shakeKeyframe 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
+
+/* ============================================================================
+   BRIGHT MODE THEME OVERRIDES (ONLY ACTIVE WHEN .bright-mode IS TOGGLED ON)
+   ============================================================================ */
+html.bright-mode,
+html.bright-mode body,
+.bright-mode {
+  background-color: #f4f6f9 !important;
+  color: #0f172a !important;
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.06) 0%, transparent 45%),
+    linear-gradient(to right, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.035) 1px, transparent 1px) !important;
+  background-size: 100% 100%, 36px 36px, 36px 36px !important;
+}
+
+/* Header, Footer & Main Card Surfaces */
+.bright-mode header,
+.bright-mode footer {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border-color: #e2e8f0 !important;
+}
+
+.bright-mode .glass-card {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Top-level dark card backgrounds -> Crisp White */
+.bright-mode [class*="bg-[#0a0f1d]"],
+.bright-mode [class*="bg-[#0f1422]"],
+.bright-mode [class*="bg-[#111622]"] {
+  background-color: #ffffff !important;
+}
+
+/* Nested sub-cards, pills, table headers, calendar blanks -> Soft Light Slate */
+.bright-mode [class*="bg-[#07090e]"],
+.bright-mode [class*="bg-[#070a12]"],
+.bright-mode [class*="bg-[#0a0d15]"],
+.bright-mode [class*="bg-[#0e131e]"],
+.bright-mode [class*="bg-[#0e111a]"],
+.bright-mode [class*="bg-[#090c13]"],
+.bright-mode [class*="bg-[#090b10]"],
+.bright-mode [class*="bg-[#090d16]"],
+.bright-mode [class*="bg-[#05070b]"],
+.bright-mode [class*="bg-[#131926]"],
+.bright-mode [class*="bg-[#060910]"] {
+  background-color: #f8fafc !important;
+}
+
+/* Keep fixed login backdrop and video containers clean */
+.bright-mode .fixed.inset-0[class*="bg-[#07090e]"] {
+  background-color: #f4f6f9 !important;
+}
+
+.bright-mode .bg-black {
+  background-color: #0f172a !important;
+}
+
+/* Slate Utility Surfaces */
+.bright-mode [class*="bg-slate-900"],
+.bright-mode [class*="bg-slate-800"] {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.bright-mode [class*="bg-slate-800/30"],
+.bright-mode [class*="bg-slate-800/40"],
+.bright-mode [class*="bg-slate-800/50"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* Borders & Dividers */
+.bright-mode .border-hairline,
+.bright-mode .divide-hairline > :not(:last-child),
+.bright-mode [class*="border-slate-9"],
+.bright-mode [class*="border-slate-8"],
+.bright-mode [class*="border-slate-7"],
+.bright-mode [class*="border-slate-6"],
+.bright-mode [class*="border-white/"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* Typography Hierarchy */
+.bright-mode .text-white,
+.bright-mode .text-slate-100,
+.bright-mode .text-slate-200 {
+  color: #0f172a !important;
+}
+
+.bright-mode .text-slate-300 {
+  color: #1e293b !important;
+}
+
+.bright-mode .text-slate-400,
+.bright-mode .text-slate-500 {
+  color: #475569 !important;
+}
+
+.bright-mode .text-slate-600 {
+  color: #64748b !important;
+}
+
+/* Form Inputs, Selects, Textareas */
+.bright-mode input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.bright-mode select,
+.bright-mode textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.bright-mode input::placeholder,
+.bright-mode textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Interactive Hovers */
+.bright-mode [class*="hover:bg-slate-800"]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+.bright-mode [class*="hover:text-white"]:hover {
+  color: #0f172a !important;
+}
+
+.bright-mode tr[class*="hover:bg-slate-800"]:hover {
+  background-color: #f8fafc !important;
+}
+
+/* Preserved Emerald / Crimson / Amber Accents with High-Contrast Light Tints */
+.bright-mode [class*="bg-emerald-950"],
+.bright-mode [class*="bg-emerald-500/10"],
+.bright-mode [class*="bg-emerald-500/15"],
+.bright-mode [class*="bg-emerald-500/20"] {
+  background-color: rgba(16, 185, 129, 0.11) !important;
+}
+
+.bright-mode [class*="bg-emerald-950/35"] {
+  background-color: rgba(16, 185, 129, 0.13) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  border-top-color: #10b981 !important;
+}
+
+.bright-mode .text-emerald-400,
+.bright-mode [class*="text-emerald-400/"] {
+  color: #059669 !important;
+}
+
+.bright-mode .text-emerald-300,
+.bright-mode [class*="text-emerald-300/"] {
+  color: #047857 !important;
+}
+
+.bright-mode [class*="bg-rose-950"],
+.bright-mode [class*="bg-rose-900"],
+.bright-mode [class*="bg-rose-500/20"] {
+  background-color: rgba(244, 63, 94, 0.09) !important;
+}
+
+.bright-mode [class*="bg-rose-950/35"] {
+  background-color: rgba(244, 63, 94, 0.12) !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+  border-top-color: #f43f5e !important;
+}
+
+.bright-mode .text-rose-400,
+.bright-mode [class*="text-rose-400/"] {
+  color: #e11d48 !important;
+}
+
+.bright-mode .text-rose-300,
+.bright-mode [class*="text-rose-300/"] {
+  color: #be123c !important;
+}
+
+.bright-mode [class*="bg-amber-950"],
+.bright-mode [class*="bg-amber-500/10"],
+.bright-mode [class*="bg-amber-500/15"],
+.bright-mode [class*="bg-amber-500/20"] {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+
+.bright-mode .text-amber-400,
+.bright-mode [class*="text-amber-400/"] {
+  color: #d97706 !important;
+}
+
+.bright-mode .text-amber-300,
+.bright-mode [class*="text-amber-300/"] {
+  color: #b45309 !important;
+}
+
+/* Keep solid CTA buttons crisp */
+.bright-mode button.bg-emerald-600,
+.bright-mode button[class*="bg-emerald-600"] {
+  background-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.bright-mode button[class*="bg-rose-600"],
+.bright-mode button[class*="bg-rose-600"]:hover {
+  background-color: #e11d48 !important;
+  color: #ffffff !important;
+}
+
+.bright-mode button[class*="bg-rose-600"] .text-white,
+.bright-mode button[class*="bg-rose-600"] span {
+  color: #ffffff !important;
+}
+
+/* Circular SVG Progress Ring Track */
+.progress-ring-track {
+  stroke: rgba(148, 163, 184, 0.16);
+}
+
+.bright-mode .progress-ring-track {
+  stroke: #e2e8f0 !important;
+}
+
+.bright-mode .text-cyan-400 {
+  color: #0891b2 !important;
+}
+
+

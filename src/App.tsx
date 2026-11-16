@@ -18,15 +18,35 @@ import {
   Trash2,
   Key,
   ExternalLink,
+  ChevronLeft,
   ChevronRight,
   Maximize2,
   TrendingUp,
   Target,
   User,
-  Loader2
+  Loader2,
+  Sun,
+  Moon,
+  ClipboardCheck,
+  CandlestickChart
 } from 'lucide-react';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import { supabase, StudentSession } from './lib/supabase';
+import { QuizzesTab } from './components/QuizzesTab';
+import { SimulatorTab } from './components/SimulatorTab';
+import { TraderProgressRail } from './components/TraderProgressRail';
+import {
+  DEFAULT_TIER_STATS,
+  SimulatorDifficulty,
+  SimulatorTierStats
+} from './data/simulatorData';
+import {
+  QuizProgressState,
+  extractLessonIdsFromCloud,
+  extractQuizProgressFromCloud,
+  mergeQuizProgress,
+  mergeQuizTokensIntoCloudLessons
+} from './data/quizData';
 
 ChartJS.register(...registerables);
 
@@ -87,6 +107,100 @@ const STUDENT_SESSION_KEY = 'rjs_student_session';
 const TRADES_STORAGE_KEY = 'rjs_phase2_logs';
 const KEYWORDS_STORAGE_KEY = 'rjs_desk_unlocked_keywords';
 const START_BAL_KEY = 'rjs_desk_start_bal';
+const BASE_ONE_R_PHP = 1000;
+
+const parseNumericPrice = (val: unknown): number | null => {
+  if (val === null || val === undefined) return null;
+  const cleaned = String(val).replace(/,/g, '').trim();
+  if (!cleaned || cleaned === '-') return null;
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : null;
+};
+
+interface DynamicTradeCalc {
+  outcomeType: 'TP' | 'SL' | 'BE';
+  rrr: number;
+  outcomeBadge: string;
+  rrrLabel: string;
+  pnl: number;
+  hasValidBracket: boolean;
+}
+
+const calculateDynamicTradeMetrics = (
+  entryVal: unknown,
+  slVal: unknown,
+  tpVal: unknown,
+  rawOutcome: unknown,
+  fallbackPnl?: number
+): DynamicTradeCalc => {
+  const entry = parseNumericPrice(entryVal);
+  const sl = parseNumericPrice(slVal);
+  const tp = parseNumericPrice(tpVal);
+
+  const resStr = String(rawOutcome || '').toUpperCase();
+  let outcomeType: 'TP' | 'SL' | 'BE' = 'TP';
+
+  if (resStr.includes('SL') || resStr.includes('STOP LOSS')) {
+    outcomeType = 'SL';
+  } else if (resStr.includes('BE') || resStr.includes('BREAKEVEN') || resStr === '0R' || resStr === '0.0R') {
+    outcomeType = 'BE';
+  } else if (resStr.includes('TP') || resStr.includes('TAKE PROFIT')) {
+    outcomeType = 'TP';
+  } else if (typeof fallbackPnl === 'number') {
+    if (fallbackPnl < 0) outcomeType = 'SL';
+    else if (fallbackPnl === 0) outcomeType = 'BE';
+    else outcomeType = 'TP';
+  }
+
+  const riskPoints = entry !== null && sl !== null ? Math.abs(entry - sl) : 0;
+  const rewardPoints = entry !== null && tp !== null ? Math.abs(tp - entry) : 0;
+  const hasValidBracket = entry !== null && sl !== null && tp !== null && riskPoints > 0;
+  const rawRRR = riskPoints > 0 ? rewardPoints / riskPoints : 0;
+  const displayRRR = Number(rawRRR.toFixed(2));
+
+  if (outcomeType === 'SL') {
+    return {
+      outcomeType: 'SL',
+      rrr: displayRRR,
+      outcomeBadge: 'SL -1R',
+      rrrLabel: '-1R',
+      pnl: -BASE_ONE_R_PHP,
+      hasValidBracket
+    };
+  }
+
+  if (outcomeType === 'BE') {
+    return {
+      outcomeType: 'BE',
+      rrr: displayRRR,
+      outcomeBadge: 'BE 0R',
+      rrrLabel: '0R',
+      pnl: 0,
+      hasValidBracket
+    };
+  }
+
+  const effectiveRawRRR = hasValidBracket
+    ? rawRRR
+    : typeof fallbackPnl === 'number' && fallbackPnl > 0
+      ? fallbackPnl / BASE_ONE_R_PHP
+      : 0;
+  const effectiveDisplayRRR = Number(effectiveRawRRR.toFixed(2));
+  const exactPnL = hasValidBracket
+    ? Math.round(rawRRR * BASE_ONE_R_PHP)
+    : typeof fallbackPnl === 'number' && fallbackPnl > 0
+      ? Math.round(fallbackPnl)
+      : 0;
+
+  return {
+    outcomeType: 'TP',
+    rrr: effectiveDisplayRRR,
+    outcomeBadge: `TP 1:${effectiveDisplayRRR}`,
+    rrrLabel: `1:${effectiveDisplayRRR}`,
+    pnl: exactPnL,
+    hasValidBracket
+  };
+};
 
 const NOVEMBER_EVENTS: CalendarEvent[] = [
   {
@@ -522,7 +636,7 @@ const PHASE_2_LESSONS: LessonItem[] = [
     id: 'p2_06',
     phase: 2,
     num: '06',
-    title: 'Surprise Module',
+    title: 'POI For A Swing',
     duration: '50:51 MIN',
     secretKeyword: 'RJS',
     hint: 'A sequence of 20 executions evaluated only after completion.',
@@ -539,7 +653,7 @@ const PHASE_2_LESSONS: LessonItem[] = [
     id: 'p2_07',
     phase: 2,
     num: '07',
-    title: 'POI For A Swing',
+    title: 'Surprise Module',
     duration: 'TBD',
     secretKeyword: 'SWING',
     hint: 'Transitioning from ₱10,000 testing base to institutional prop funding.',
@@ -624,16 +738,90 @@ export default function App() {
   const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
   const [authError, setAuthError] = useState<boolean>(false);
   const [authErrorMessage, setAuthErrorMessage] = useState<string>('ACCESS DENIED // INVALID OR INACTIVE DESK SECURITY KEY');
-  const [activeTab, setActiveTab] = useState<'defense' | 'vault' | 'audit'>('defense');
+  const [activeTab, setActiveTab] = useState<'defense' | 'vault' | 'audit' | 'quizzes' | 'simulator'>('defense');
+  const SIM_TIER_STATS_PREFIX = 'rjs_sim_tier_stats_';
+  const [simulatorTierStats, setSimulatorTierStats] = useState<SimulatorTierStats>(DEFAULT_TIER_STATS);
+
+  useEffect(() => {
+    const key = `${SIM_TIER_STATS_PREFIX}${currentStudent?.id || 'guest'}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        setSimulatorTierStats(DEFAULT_TIER_STATS);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setSimulatorTierStats({
+        easy: { ...DEFAULT_TIER_STATS.easy, ...(parsed?.easy || {}) },
+        medium: { ...DEFAULT_TIER_STATS.medium, ...(parsed?.medium || {}) },
+        hard: { ...DEFAULT_TIER_STATS.hard, ...(parsed?.hard || {}) }
+      });
+    } catch {
+      setSimulatorTierStats(DEFAULT_TIER_STATS);
+    }
+  }, [currentStudent?.id]);
+
+  const handleUpdateSimulatorTierStats = (
+    diff: SimulatorDifficulty,
+    runScore: number,
+    runBestStreak: number,
+    runCorrectCount: number
+  ) => {
+    setSimulatorTierStats((prev) => {
+      const curr = prev[diff] || DEFAULT_TIER_STATS[diff];
+      const next: SimulatorTierStats = {
+        ...prev,
+        [diff]: {
+          ...curr,
+          highScore: Math.max(curr.highScore, runScore),
+          bestStreak: Math.max(curr.bestStreak, runBestStreak),
+          bestCorrect: Math.max(curr.bestCorrect, runCorrectCount)
+        }
+      };
+      const key = `${SIM_TIER_STATS_PREFIX}${currentStudent?.id || 'guest'}`;
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const overallSimulatorHighScore = Math.max(
+    simulatorTierStats.easy.highScore,
+    simulatorTierStats.medium.highScore,
+    simulatorTierStats.hard.highScore
+  );
 
   // Clocks
   const [manilaClock, setManilaClock] = useState<string>('--:--:-- PHT');
   const [nyCountdown, setNyCountdown] = useState<string>('CALCULATING...');
   const [isNyActive, setIsNyActive] = useState<boolean>(false);
 
-  // Audio Synth
+  // Audio Synth & Theme Mode (Default: Dark Mode)
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const THEME_STORAGE_KEY = 'rjs_desk_theme';
+  const [isBrightMode, setIsBrightMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('rjs_desk_theme') === 'bright';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const rootEl = document.documentElement;
+    if (isBrightMode) {
+      rootEl.classList.add('bright-mode');
+      rootEl.setAttribute('data-theme', 'bright');
+    } else {
+      rootEl.classList.remove('bright-mode');
+      rootEl.removeAttribute('data-theme');
+    }
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, isBrightMode ? 'bright' : 'dark');
+    } catch {}
+  }, [isBrightMode]);
 
   // Pre-Trade Risk Matrix & Execution Rules
   const [startingBalance, setStartingBalance] = useState<number>(10000);
@@ -656,8 +844,94 @@ export default function App() {
   const [tierRestrictedNotice, setTierRestrictedNotice] = useState<string | null>(null);
   const [worksheetModalOpen, setWorksheetModalOpen] = useState<boolean>(false);
 
-  // Normalization helper for lesson IDs across formats (e.g. 'p1-01' vs 'p1_01')
-  const normalizeLessonId = (id: string): string => id.toLowerCase().replace(/[-_]/g, '');
+  // Quizzes Tab Progress (Per-Student LocalStorage + Supabase Cloud Sync)
+  const QUIZ_STORAGE_KEY_PREFIX = 'rjs_quiz_progress_';
+  const [quizProgress, setQuizProgress] = useState<QuizProgressState>({
+    passedSections: [],
+    bestScores: {}
+  });
+
+  const loadLocalQuizProgress = (studentId?: string): QuizProgressState => {
+    const key = `${QUIZ_STORAGE_KEY_PREFIX}${studentId || 'guest'}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return { passedSections: [], bestScores: {} };
+      const parsed = JSON.parse(raw);
+      return {
+        passedSections: Array.isArray(parsed.passedSections) ? parsed.passedSections.map(Number) : [],
+        bestScores: parsed.bestScores && typeof parsed.bestScores === 'object' ? parsed.bestScores : {}
+      };
+    } catch {
+      return { passedSections: [], bestScores: {} };
+    }
+  };
+
+  const handleSaveQuizProgress = async (nextProgress: QuizProgressState) => {
+    setQuizProgress(nextProgress);
+    const sid = currentStudent?.id || 'guest';
+    try {
+      localStorage.setItem(`${QUIZ_STORAGE_KEY_PREFIX}${sid}`, JSON.stringify(nextProgress));
+    } catch {}
+
+    if (currentStudent?.id) {
+      try {
+        const mergedCloud = mergeQuizTokensIntoCloudLessons(
+          currentStudent.unlocked_lessons,
+          nextProgress
+        );
+        const { error: syncErr } = await supabase
+          .from('students')
+          .update({ unlocked_lessons: mergedCloud })
+          .eq('id', currentStudent.id);
+
+        if (!syncErr) {
+          const updatedStudent: StudentSession = {
+            ...currentStudent,
+            unlocked_lessons: mergedCloud
+          };
+          setCurrentStudent(updatedStudent);
+          localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(updatedStudent));
+        } else {
+          console.error('Supabase quiz progress sync error:', syncErr);
+        }
+      } catch (err) {
+        console.error('Failed to sync quiz progress to Supabase:', err);
+      }
+    }
+  };
+
+  // Normalization helper for lesson IDs across formats (e.g. 'p1-01' vs 'p1_01', 'pro-01' vs 'pa_01')
+  const normalizeLessonId = (id: string): string =>
+    id.toLowerCase().replace(/[-_]/g, '').replace(/^pro(?=\d)/, 'pa');
+
+  const isMasterOrAdminAccount = (student?: StudentSession | null): boolean => {
+    if (!student) return false;
+    const nameLower = (student.full_name || '').toLowerCase();
+    const tierLower = (student.tier || '').toLowerCase();
+    return (
+      (nameLower.includes('ryan jade') && (nameLower.includes('master') || nameLower.includes('admin'))) ||
+      tierLower === 'master' ||
+      tierLower === 'admin'
+    );
+  };
+
+  const hasPhase2Access = (student?: StudentSession | null): boolean => {
+    if (!student) return false;
+    if (isMasterOrAdminAccount(student)) return true;
+    const tierLower = (student.tier || 'phase1').toLowerCase();
+    return tierLower === 'phase2' || tierLower === 'pro';
+  };
+
+  const hasProAccess = (student?: StudentSession | null): boolean => {
+    if (!student) return false;
+    if (isMasterOrAdminAccount(student)) return true;
+    const tierLower = (student.tier || 'phase1').toLowerCase();
+    return tierLower === 'pro';
+  };
+
+  const isMasterAccount = isMasterOrAdminAccount(currentStudent);
+  const isPhase2Unlocked = hasPhase2Access(currentStudent);
+  const isProUnlocked = hasProAccess(currentStudent);
 
   const isLessonVerified = (lessonId: string, unlockedList: string[]): boolean => {
     return unlockedList.some(id => normalizeLessonId(id) === normalizeLessonId(lessonId));
@@ -665,6 +939,8 @@ export default function App() {
 
   // Helper to determine if a lesson is accessible based on sequential completion of previous lesson
   const isLessonUnlocked = (lesson: LessonItem, phaseList: LessonItem[], unlockedList: string[]): boolean => {
+    if (lesson.duration.toUpperCase() === 'TBD') return false;
+    if (isMasterOrAdminAccount(currentStudent)) return true;
     const index = phaseList.findIndex(l => normalizeLessonId(l.id) === normalizeLessonId(lesson.id));
     if (index <= 0) return true; // Lesson 01 of each active section is always unlocked by default
     const prevLesson = phaseList[index - 1];
@@ -686,14 +962,24 @@ export default function App() {
   const [tradePosition, setTradePosition] = useState<'BUY' | 'SELL'>('BUY');
   const [tradeEntryPrice, setTradeEntryPrice] = useState<string>('');
   const [tradeLotSize, setTradeLotSize] = useState<number>(1.0);
-  const [tradeStopLoss, setTradeStopLoss] = useState<string>('20,410.50');
-  const [tradeTakeProfit, setTradeTakeProfit] = useState<string>('20,530.50');
+  const [tradeStopLoss, setTradeStopLoss] = useState<string>('');
+  const [tradeTakeProfit, setTradeTakeProfit] = useState<string>('');
   const [tradeExecutionTime, setTradeExecutionTime] = useState<string>('09:30 PM PHT');
   const [tradeResult, setTradeResult] = useState<string>('Take Profit (TP)');
-  const [tradeRRR, setTradeRRR] = useState<string>('1:3.0R');
-  const [tradePnL, setTradePnL] = useState<number>(3000);
-  const [tradeDisciplineNote, setTradeDisciplineNote] = useState<string>('');
+  const [confirmResetAll, setConfirmResetAll] = useState<boolean>(false);
+  const resetConfirmTimerRef = useRef<number | null>(null);
   const [auditFilter, setAuditFilter] = useState<'ALL' | 'WINS' | 'LOSSES' | 'BE'>('ALL');
+  const [pnlCalendarMonth, setPnlCalendarMonth] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+
+  const liveTradePreview = calculateDynamicTradeMetrics(
+    tradeEntryPrice,
+    tradeStopLoss,
+    tradeTakeProfit,
+    tradeResult
+  );
 
   // Trajectory Chart Canvas Ref
   const chartCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -747,45 +1033,108 @@ export default function App() {
     if (savedSession) {
       try {
         const student = JSON.parse(savedSession);
-        if (student && student.id) {
+        if (student && student.id && isAuth) {
           setCurrentStudent(student);
           setIsAuthenticated(true);
-          if (Array.isArray(student.unlocked_lessons) && student.unlocked_lessons.length > 0) {
-            setUnlockedKeywords(student.unlocked_lessons);
+          const savedLessonIds = extractLessonIdsFromCloud(student.unlocked_lessons);
+          if (savedLessonIds.length > 0) {
+            setUnlockedKeywords(savedLessonIds);
           }
-          // Load trades for this student from Supabase
+          setQuizProgress(
+            mergeQuizProgress(
+              loadLocalQuizProgress(student.id),
+              extractQuizProgressFromCloud(student.unlocked_lessons)
+            )
+          );
+          // Load cached trades recalculated dynamically, then refresh from Supabase
+          try {
+            const cachedTrades = localStorage.getItem(TRADES_STORAGE_KEY);
+            if (cachedTrades) {
+              const raw = JSON.parse(cachedTrades);
+              if (Array.isArray(raw)) {
+                const normalized = raw.map((t: any, idx: number) => {
+                  const calc = calculateDynamicTradeMetrics(
+                    t.entryPrice ?? t.entry_price,
+                    t.stopLoss ?? t.stop_loss,
+                    t.takeProfit ?? t.take_profit,
+                    t.result ?? t.outcome,
+                    Number(t.pnl ?? t.net_pnl)
+                  );
+                  return {
+                    ...t,
+                    id: t.id || 'T' + (Date.now() + idx),
+                    pair: 'USTECH100',
+                    position: t.position || 'BUY',
+                    entryPrice: t.entryPrice || '-',
+                    lotSize: Number(t.lotSize) || 1.0,
+                    stopLoss: t.stopLoss || '-',
+                    takeProfit: t.takeProfit || '-',
+                    executionTime: t.executionTime || '09:30 PM PHT',
+                    result: calc.outcomeBadge,
+                    rrr: calc.rrrLabel,
+                    pnl: calc.pnl,
+                    note: t.note || '',
+                    createdAt: t.createdAt || Date.now() + idx
+                  };
+                });
+                setTrades(normalized);
+              }
+            }
+          } catch {}
+
+          // Load authoritative trades for this student from Supabase
           loadStudentTrades(student.id);
 
-          // Background sync to ensure freshest profile/tier data from Supabase
-          supabase
-            .from('students')
-            .select('*')
-            .eq('id', student.id)
-            .eq('is_active', true)
-            .maybeSingle()
-            .then(({ data: freshStudent, error }) => {
-              if (freshStudent && !error) {
-                const refreshed: StudentSession = {
-                  id: freshStudent.id,
-                  full_name: freshStudent.full_name,
-                  tier: freshStudent.tier || 'phase1',
-                  is_active: freshStudent.is_active,
-                  unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
-                  passcode: freshStudent.passcode,
-                  created_at: freshStudent.created_at
-                };
-                setCurrentStudent(refreshed);
-                localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(refreshed));
-                if (refreshed.unlocked_lessons && refreshed.unlocked_lessons.length > 0) {
-                  setUnlockedKeywords(refreshed.unlocked_lessons);
-                  localStorage.setItem(KEYWORDS_STORAGE_KEY, JSON.stringify(refreshed.unlocked_lessons));
+          // Background sync to ensure freshest profile/tier data from Supabase without losing local progress
+          const refreshStudentProfileFromCloud = (sid: string) => {
+            supabase
+              .from('students')
+              .select('*')
+              .eq('id', sid)
+              .eq('is_active', true)
+              .maybeSingle()
+              .then(({ data: freshStudent, error }) => {
+                if (freshStudent && !error) {
+                  const refreshed: StudentSession = {
+                    id: freshStudent.id,
+                    full_name: freshStudent.full_name,
+                    tier: freshStudent.tier || 'phase1',
+                    is_active: freshStudent.is_active,
+                    unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
+                    passcode: freshStudent.passcode,
+                    created_at: freshStudent.created_at
+                  };
+                  setCurrentStudent(refreshed);
+                  localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(refreshed));
+                  const cloudLessonIds = extractLessonIdsFromCloud(refreshed.unlocked_lessons);
+                  if (cloudLessonIds.length > 0) {
+                    setUnlockedKeywords(prev => {
+                      const merged = Array.from(new Set([...prev, ...cloudLessonIds]));
+                      localStorage.setItem(KEYWORDS_STORAGE_KEY, JSON.stringify(merged));
+                      return merged;
+                    });
+                  }
+                  const mergedQuiz = mergeQuizProgress(
+                    loadLocalQuizProgress(refreshed.id),
+                    extractQuizProgressFromCloud(refreshed.unlocked_lessons)
+                  );
+                  setQuizProgress(mergedQuiz);
+                  try {
+                    localStorage.setItem(`${QUIZ_STORAGE_KEY_PREFIX}${refreshed.id}`, JSON.stringify(mergedQuiz));
+                  } catch {}
+                } else if (!freshStudent && !error) {
+                  // Student deactivated in Supabase
+                  localStorage.removeItem(AUTH_STORAGE_KEY);
+                  localStorage.removeItem(STUDENT_SESSION_KEY);
+                  setIsAuthenticated(false);
+                  setCurrentStudent(null);
                 }
-              }
-            });
+              });
+          };
+
+          refreshStudentProfileFromCloud(student.id);
         }
       } catch {}
-    } else if (isAuth) {
-      setIsAuthenticated(true);
     }
 
     // 2. Load Start Balance & Fallback Unlocked Keywords
@@ -801,7 +1150,7 @@ export default function App() {
     try {
       const savedKeywords = localStorage.getItem(KEYWORDS_STORAGE_KEY);
       if (savedKeywords && unlockedKeywords.length === 0) {
-        setUnlockedKeywords(JSON.parse(savedKeywords));
+        setUnlockedKeywords(extractLessonIdsFromCloud(JSON.parse(savedKeywords)));
       }
     } catch {}
 
@@ -814,6 +1163,76 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Refresh student tier/profile from Supabase when tab regains focus so Phase 2 upgrades apply immediately
+  useEffect(() => {
+    const sid = currentStudent?.id;
+    if (!sid || !isAuthenticated) return;
+    let lastCheckedAt = 0;
+
+    const syncTierOnFocus = () => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastCheckedAt < 3000) return;
+      lastCheckedAt = now;
+
+      supabase
+        .from('students')
+        .select('*')
+        .eq('id', sid)
+        .eq('is_active', true)
+        .maybeSingle()
+        .then(({ data: freshStudent, error }) => {
+          if (freshStudent && !error) {
+            const refreshed: StudentSession = {
+              id: freshStudent.id,
+              full_name: freshStudent.full_name,
+              tier: freshStudent.tier || 'phase1',
+              is_active: freshStudent.is_active,
+              unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
+              passcode: freshStudent.passcode,
+              created_at: freshStudent.created_at
+            };
+            setCurrentStudent(refreshed);
+            localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(refreshed));
+            const cloudLessonIds = extractLessonIdsFromCloud(refreshed.unlocked_lessons);
+            if (cloudLessonIds.length > 0) {
+              setUnlockedKeywords(prev => {
+                const merged = Array.from(new Set([...prev, ...cloudLessonIds]));
+                localStorage.setItem(KEYWORDS_STORAGE_KEY, JSON.stringify(merged));
+                return merged;
+              });
+            }
+            setQuizProgress(prev => {
+              const merged = mergeQuizProgress(prev, extractQuizProgressFromCloud(refreshed.unlocked_lessons));
+              try {
+                localStorage.setItem(`${QUIZ_STORAGE_KEY_PREFIX}${refreshed.id}`, JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+        });
+    };
+
+    window.addEventListener('focus', syncTierOnFocus);
+    document.addEventListener('visibilitychange', syncTierOnFocus);
+    return () => {
+      window.removeEventListener('focus', syncTierOnFocus);
+      document.removeEventListener('visibilitychange', syncTierOnFocus);
+    };
+  }, [currentStudent?.id, isAuthenticated]);
+
+  // Immediately clear restrictions and activate Phase 2 lessons when student tier unlocks Phase 2
+  useEffect(() => {
+    if (isPhase2Unlocked) {
+      setTierRestrictedNotice(null);
+      if (curriculumPhase === 2 && activeLesson.phase !== 2) {
+        setActiveLesson(PHASE_2_LESSONS[0]);
+      }
+    } else if (curriculumPhase === 3 || (curriculumPhase === 2 && activeLesson.phase === 2)) {
+      setActiveLesson(PHASE_1_LESSONS[0]);
+    }
+  }, [isPhase2Unlocked, curriculumPhase, activeLesson.phase]);
 
   const refreshPhtTimestamp = () => {
     const now = new Date();
@@ -881,22 +1300,31 @@ export default function App() {
       }
 
       if (data) {
-        const mappedTrades: AuditTrade[] = data.map((t, idx) => ({
-          id: t.id,
-          pair: 'USTECH100',
-          tradeDate: t.trade_date || new Date().toISOString().split('T')[0],
-          position: (t.direction as 'BUY' | 'SELL') || 'BUY',
-          entryPrice: t.entry_price != null ? String(t.entry_price) : '-',
-          lotSize: Number(t.lot_size) || 1.0,
-          stopLoss: t.stop_loss != null ? String(t.stop_loss) : '-',
-          takeProfit: t.take_profit != null ? String(t.take_profit) : '-',
-          executionTime: t.created_at ? new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '09:30 PM PHT',
-          result: t.outcome || 'TP',
-          rrr: Number(t.net_pnl) > 0 ? `1:${(Number(t.net_pnl) / 1000).toFixed(1)}R` : (Number(t.net_pnl) < 0 ? `${(Number(t.net_pnl) / 1000).toFixed(1)}R` : '0.0R'),
-          pnl: Number(t.net_pnl) || 0,
-          note: t.notes || '',
-          createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now() + idx
-        }));
+        const mappedTrades: AuditTrade[] = data.map((t, idx) => {
+          const calc = calculateDynamicTradeMetrics(
+            t.entry_price,
+            t.stop_loss,
+            t.take_profit,
+            t.outcome,
+            Number(t.net_pnl)
+          );
+          return {
+            id: t.id,
+            pair: 'USTECH100',
+            tradeDate: t.trade_date || new Date().toISOString().split('T')[0],
+            position: (t.direction as 'BUY' | 'SELL') || 'BUY',
+            entryPrice: t.entry_price != null ? String(t.entry_price) : '-',
+            lotSize: Number(t.lot_size) || 1.0,
+            stopLoss: t.stop_loss != null ? String(t.stop_loss) : '-',
+            takeProfit: t.take_profit != null ? String(t.take_profit) : '-',
+            executionTime: t.created_at ? new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '09:30 PM PHT',
+            result: calc.outcomeBadge,
+            rrr: calc.rrrLabel,
+            pnl: calc.pnl,
+            note: t.notes || '',
+            createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now() + idx
+          };
+        });
 
         setTrades(mappedTrades);
         localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(mappedTrades));
@@ -956,10 +1384,18 @@ export default function App() {
       setIsAuthenticated(true);
       setAuthError(false);
 
-      if (sessionData.unlocked_lessons && sessionData.unlocked_lessons.length > 0) {
-        setUnlockedKeywords(sessionData.unlocked_lessons);
-        localStorage.setItem(KEYWORDS_STORAGE_KEY, JSON.stringify(sessionData.unlocked_lessons));
-      }
+      const studentUnlocked = extractLessonIdsFromCloud(sessionData.unlocked_lessons);
+      setUnlockedKeywords(studentUnlocked);
+      localStorage.setItem(KEYWORDS_STORAGE_KEY, JSON.stringify(studentUnlocked));
+
+      const mergedLoginQuiz = mergeQuizProgress(
+        loadLocalQuizProgress(student.id),
+        extractQuizProgressFromCloud(sessionData.unlocked_lessons)
+      );
+      setQuizProgress(mergedLoginQuiz);
+      try {
+        localStorage.setItem(`${QUIZ_STORAGE_KEY_PREFIX}${student.id}`, JSON.stringify(mergedLoginQuiz));
+      } catch {}
 
       setCurriculumPhase(1);
       setActiveLesson(PHASE_1_LESSONS[0]);
@@ -981,16 +1417,29 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(STUDENT_SESSION_KEY);
+    localStorage.removeItem(KEYWORDS_STORAGE_KEY);
+    localStorage.removeItem(TRADES_STORAGE_KEY);
     setIsAuthenticated(false);
     setCurrentStudent(null);
+    setUnlockedKeywords([]);
+    setQuizProgress({ passedSections: [], bestScores: {} });
+    setTrades([]);
     setPasscodeKey('');
     setAuthError(false);
     setTierRestrictedNotice(null);
     playTone(400, 'sine', 0.08);
   };
 
-  const getTierBadge = (tier?: string) => {
+  const getTierBadge = (tier?: string, fullName?: string) => {
     const t = (tier || 'phase1').toLowerCase();
+    const n = (fullName || '').toLowerCase();
+    if (t === 'master' || t === 'admin' || (n.includes('ryan jade') && n.includes('master') && t !== 'pro')) {
+      return {
+        label: 'TIER: MASTER ADMIN',
+        dotClass: 'bg-amber-400 animate-ping',
+        badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
+      };
+    }
     if (t === 'pro') {
       return {
         label: 'TIER: PRO VIP',
@@ -1013,25 +1462,26 @@ export default function App() {
   };
 
   const handleSwitchCurriculumPhase = (targetPhase: 1 | 2 | 3) => {
-    const currentTier = (currentStudent?.tier || 'phase1').toLowerCase();
-
     // PHASE 1 is accessible to all enrolled tiers
     if (targetPhase === 1) {
       setTierRestrictedNotice(null);
       setCurriculumPhase(1);
-      setActiveLesson(PHASE_1_LESSONS[0]);
+      if (activeLesson.phase !== 1) {
+        setActiveLesson(PHASE_1_LESSONS[0]);
+      }
       setInputKeyword('');
       setKeywordFeedback(null);
       playTone(500, 'sine', 0.03);
       return;
     }
 
-    // PHASE 2 requires tier === 'phase2' or 'pro'
+    // PHASE 2: Show blurred preview-and-lock state if Phase 2 is not unlocked
     if (targetPhase === 2) {
-      if (currentTier === 'phase1') {
+      if (!hasPhase2Access(currentStudent)) {
         playErrorTone();
+        setCurriculumPhase(2);
         setTierRestrictedNotice(
-          "MODULE RESTRICTED // PHASE 2 ACCESS REQUIRED. Complete your Phase 2 enrollment upgrade to unlock institutional swing & advanced execution modules."
+          "MODULE RESTRICTED // PHASE 2 ACCESS REQUIRED. Settle Phase 2 to unlock Phase 2 execution & swing modules."
         );
         return;
       }
@@ -1044,16 +1494,16 @@ export default function App() {
       return;
     }
 
-    // PRO ARCHIVES requires tier === 'pro'
+    // PRO ARCHIVES requires Pro or Master/Admin access
     if (targetPhase === 3) {
-      if (currentTier === 'phase1') {
+      if (!hasPhase2Access(currentStudent)) {
         playErrorTone();
         setTierRestrictedNotice(
-          "MODULE RESTRICTED // PHASE 2 ACCESS REQUIRED. Complete your Phase 2 enrollment upgrade to unlock institutional swing & advanced execution modules."
+          "MODULE RESTRICTED // PHASE 2 ACCESS REQUIRED. Settle Phase 2 to unlock Phase 2 execution & swing modules."
         );
         return;
       }
-      if (currentTier === 'phase2') {
+      if (!hasProAccess(currentStudent)) {
         playErrorTone();
         setTierRestrictedNotice(
           "MODULE RESTRICTED // PRO ARCHIVES ACCESS REQUIRED. Upgrade your student tier to unlock institutional trade reviews and advanced archives."
@@ -1241,6 +1691,26 @@ export default function App() {
   };
 
   const handleSelectLesson = (lesson: LessonItem) => {
+    if (lesson.phase === 2 && !isPhase2Unlocked) {
+      playErrorTone();
+      setTierRestrictedNotice(
+        "MODULE RESTRICTED // PHASE 2 ACCESS REQUIRED. Settle Phase 2 to unlock Phase 2 execution & swing modules."
+      );
+      return;
+    }
+    if (lesson.phase === 3 && !isProUnlocked) {
+      playErrorTone();
+      setTierRestrictedNotice(
+        "MODULE RESTRICTED // PRO ARCHIVES ACCESS REQUIRED. Upgrade your student tier to unlock institutional trade reviews and advanced archives."
+      );
+      return;
+    }
+    if (lesson.duration.toUpperCase() === 'TBD') {
+      playErrorTone();
+      setAccessDeniedAlert('UPCOMING MODULE // This lesson is scheduled for release soon (TBD).');
+      return;
+    }
+
     const currentList = lesson.phase === 1 
       ? PHASE_1_LESSONS 
       : lesson.phase === 2 
@@ -1328,16 +1798,7 @@ export default function App() {
   -------------------------------------------------------------- */
   const handleResultSelection = (resultVal: string) => {
     setTradeResult(resultVal);
-    if (resultVal.includes('SL') || resultVal.includes('Stop Loss')) {
-      setTradePnL(-oneR);
-      setTradeRRR('-1.0R');
-    } else if (resultVal.includes('BE') || resultVal.includes('Breakeven')) {
-      setTradePnL(0);
-      setTradeRRR('0.0R');
-    } else {
-      setTradePnL(oneR * 3);
-      setTradeRRR('1:3.0R');
-    }
+    playTone(460, 'sine', 0.02);
   };
 
   const handleCommitTrade = async (e: React.FormEvent) => {
@@ -1353,29 +1814,22 @@ export default function App() {
     const hours12 = String(hours % 12 || 12).padStart(2, '0');
     const autoTime = `${hours12}:${mins} ${ampm}`;
 
-    const pnlVal = Number(tradePnL) || 0;
-    const rRatio = pnlVal / 1000;
-    let rrr = '0.0R';
-    if (pnlVal > 0) {
-      rrr = `1:${rRatio.toFixed(1)}R`;
-    } else if (pnlVal < 0) {
-      rrr = `${rRatio.toFixed(1)}R`;
-    }
+    const calc = calculateDynamicTradeMetrics(
+      tradeEntryPrice,
+      tradeStopLoss,
+      tradeTakeProfit,
+      tradeResult
+    );
 
-    let outcome = 'TP';
-    if (pnlVal > 0 || tradeResult.includes('TP') || tradeResult.includes('Take Profit')) {
-      outcome = `TP (${rrr})`;
-    } else if (pnlVal < 0 || tradeResult.includes('SL') || tradeResult.includes('Stop Loss')) {
-      outcome = `SL (${rrr})`;
-    } else {
-      outcome = `BE (${rrr})`;
-    }
+    const outcome = calc.outcomeBadge;
+    const rrr = calc.rrrLabel;
+    const pnlVal = calc.pnl;
 
     const cleanDate = tradeDate || new Date().toISOString().split('T')[0];
     const numLot = Number(tradeLotSize) || 1.0;
-    const cleanEntry = tradeEntryPrice ? parseFloat(tradeEntryPrice.replace(/,/g, '')) || null : null;
-    const cleanStop = tradeStopLoss ? parseFloat(tradeStopLoss.replace(/,/g, '')) || null : null;
-    const cleanTarget = tradeTakeProfit ? parseFloat(tradeTakeProfit.replace(/,/g, '')) || null : null;
+    const cleanEntry = parseNumericPrice(tradeEntryPrice);
+    const cleanStop = parseNumericPrice(tradeStopLoss);
+    const cleanTarget = parseNumericPrice(tradeTakeProfit);
 
     let assignedId = 'T' + Date.now();
 
@@ -1394,7 +1848,7 @@ export default function App() {
             take_profit: cleanTarget,
             outcome,
             net_pnl: pnlVal,
-            notes: tradeDisciplineNote || null
+            notes: null
           })
           .select()
           .single();
@@ -1422,7 +1876,7 @@ export default function App() {
       result: outcome,
       rrr,
       pnl: pnlVal,
-      note: tradeDisciplineNote,
+      note: '',
       createdAt: Date.now()
     };
 
@@ -1431,65 +1885,99 @@ export default function App() {
     localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(nextTrades));
 
     // Update calculator current balance
-    const net = nextTrades.reduce((acc, t) => acc + t.pnl, 0);
+    const net = nextTrades.reduce((acc, t) => acc + calculateDynamicTradeMetrics(t.entryPrice, t.stopLoss, t.takeProfit, t.result, t.pnl).pnl, 0);
     setCurrentBalanceInput(startingBalance + net);
 
     // Reset Form fields
     setTradeEntryPrice('');
     setTradeStopLoss('');
     setTradeTakeProfit('');
-    setTradeDisciplineNote('');
     playSuccessChime();
   };
 
   const handleDeleteTrade = async (id: string) => {
-    if (window.confirm('Delete this trade entry from the Phase 2 audit ledger?')) {
-      if (currentStudent?.id) {
-        try {
-          const { error: delErr } = await supabase
-            .from('trade_logs')
-            .delete()
-            .eq('id', id)
-            .eq('student_id', currentStudent.id);
-          if (delErr) {
-            console.error('Supabase trade delete error:', delErr);
-          }
-        } catch (err) {
-          console.error('Failed to delete trade from Supabase:', err);
-        }
-      }
+    const nextTrades = trades.filter(t => t.id !== id);
+    setTrades(nextTrades);
+    localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(nextTrades));
+    const net = nextTrades.reduce(
+      (acc, t) => acc + calculateDynamicTradeMetrics(t.entryPrice, t.stopLoss, t.takeProfit, t.result, t.pnl).pnl,
+      0
+    );
+    setCurrentBalanceInput(startingBalance + net);
+    playTone(330, 'sawtooth', 0.08);
 
-      const nextTrades = trades.filter(t => t.id !== id);
-      setTrades(nextTrades);
-      localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(nextTrades));
-      const net = nextTrades.reduce((acc, t) => acc + t.pnl, 0);
-      setCurrentBalanceInput(startingBalance + net);
-      playTone(330, 'sawtooth', 0.08);
+    if (currentStudent?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id)) {
+      try {
+        const { error: delErr } = await supabase
+          .from('trade_logs')
+          .delete()
+          .eq('id', id)
+          .eq('student_id', currentStudent.id);
+        if (delErr) {
+          console.error('Supabase trade delete error:', delErr);
+        }
+      } catch (err) {
+        console.error('Failed to delete trade from Supabase:', err);
+      }
     }
   };
 
-  const handleResetAuditBlock = async () => {
-    if (window.confirm('RESET 20-TRADE AUDIT BLOCK?\n\nThis will clear all logged Phase 2 trades. Make sure you exported your CSV report first.')) {
-      if (currentStudent?.id) {
-        try {
-          await supabase
-            .from('trade_logs')
-            .delete()
-            .eq('student_id', currentStudent.id);
-        } catch (err) {
-          console.error('Failed to reset trades in Supabase:', err);
-        }
+  const handleResetAllTrades = async () => {
+    if (!confirmResetAll) {
+      setConfirmResetAll(true);
+      if (resetConfirmTimerRef.current) {
+        window.clearTimeout(resetConfirmTimerRef.current);
       }
-      setTrades([]);
-      localStorage.removeItem(TRADES_STORAGE_KEY);
-      localStorage.removeItem('rjs_audit_trades_log');
-      setCurrentBalanceInput(startingBalance);
-      playTone(300, 'sawtooth', 0.15);
+      resetConfirmTimerRef.current = window.setTimeout(() => {
+        setConfirmResetAll(false);
+        resetConfirmTimerRef.current = null;
+      }, 4000);
+      playTone(480, 'sine', 0.04);
+      return;
+    }
+
+    if (resetConfirmTimerRef.current) {
+      window.clearTimeout(resetConfirmTimerRef.current);
+      resetConfirmTimerRef.current = null;
+    }
+    setConfirmResetAll(false);
+    setTrades([]);
+    localStorage.removeItem(TRADES_STORAGE_KEY);
+    localStorage.removeItem('rjs_audit_trades_log');
+    setCurrentBalanceInput(startingBalance);
+    playTone(300, 'sawtooth', 0.15);
+
+    if (currentStudent?.id) {
+      try {
+        const { error: resetErr } = await supabase
+          .from('trade_logs')
+          .delete()
+          .eq('student_id', currentStudent.id);
+        if (resetErr) {
+          console.error('Supabase reset trades error:', resetErr);
+        }
+      } catch (err) {
+        console.error('Failed to reset trades in Supabase:', err);
+      }
     }
   };
+
+  /* -------------------------------------------------------------
+     DYNAMIC RECALCULATION & STATISTICS COMPUTATION
+  -------------------------------------------------------------- */
+  // Recalculate existing & newly logged rows dynamically from Entry, SL, TP, and Outcome
+  const recalculatedTrades = trades.map(t => {
+    const calc = calculateDynamicTradeMetrics(t.entryPrice, t.stopLoss, t.takeProfit, t.result, t.pnl);
+    return {
+      ...t,
+      result: calc.outcomeBadge,
+      rrr: calc.rrrLabel,
+      pnl: calc.pnl
+    };
+  });
 
   const handleExportCSV = () => {
-    if (trades.length === 0) {
+    if (recalculatedTrades.length === 0) {
       alert('No audit trades to export.');
       return;
     }
@@ -1497,10 +1985,10 @@ export default function App() {
     let runningBal = startingBal;
 
     let csv = 'Index,Date_Time,Pair,Position,Position_Value,Lot_Size,Stop_Loss,Take_Profit,Result,RRR,PnL_PHP,Running_Balance_PHP,Discipline_Notes\n';
-    trades.forEach((t, i) => {
+    recalculatedTrades.forEach((t, i) => {
       runningBal += t.pnl;
       const cleanNote = (t.note || '').replace(/"/g, '""');
-      csv += `${i + 1},"${t.executionTime || '09:30 PM PHT'}","${t.pair || 'USTECH100'}","${t.position}","${t.entryPrice || '-'}","${Number(t.lotSize ?? 1.0).toFixed(2)}","${t.stopLoss || '-'}","${t.takeProfit || '-'}","${t.result}","${t.rrr}",${t.pnl},${runningBal},"${cleanNote}"\n`;
+      csv += `${i + 1},"${t.tradeDate || ''} ${t.executionTime || '09:30 PM PHT'}","${t.pair || 'USTECH100'}","${t.position}","${t.entryPrice || '-'}","${Number(t.lotSize ?? 1.0).toFixed(2)}","${t.stopLoss || '-'}","${t.takeProfit || '-'}","${t.result}","${t.rrr}",${t.pnl},${runningBal},"${cleanNote}"\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1513,27 +2001,24 @@ export default function App() {
     playTone(700, 'sine', 0.05);
   };
 
-  /* -------------------------------------------------------------
-     STATISTICS COMPUTATION
-  -------------------------------------------------------------- */
-  const netPnL = trades.reduce((acc, t) => acc + t.pnl, 0);
+  const netPnL = recalculatedTrades.reduce((acc, t) => acc + t.pnl, 0);
   const currentTotalBalance = startingBalance + netPnL;
   const balanceDelta = currentTotalBalance - startingBalance;
   const pctDelta = ((balanceDelta / startingBalance) * 100).toFixed(1);
 
-  const winsCount = trades.filter(t => t.pnl > 0).length;
-  const lossesCount = trades.filter(t => t.pnl < 0).length;
-  const beCount = trades.filter(t => t.pnl === 0).length;
-  const totalTradesCount = trades.length;
+  const winsCount = recalculatedTrades.filter(t => t.pnl > 0).length;
+  const lossesCount = recalculatedTrades.filter(t => t.pnl < 0).length;
+  const beCount = recalculatedTrades.filter(t => t.pnl === 0).length;
+  const totalTradesCount = recalculatedTrades.length;
   const winRate = totalTradesCount > 0 ? ((winsCount / totalTradesCount) * 100).toFixed(1) : '0.0';
-  const totalR = (netPnL / oneR).toFixed(1);
+  const totalR = Number((netPnL / BASE_ONE_R_PHP).toFixed(2)).toString();
 
   const cappedAuditTrades = Math.min(totalTradesCount, 20);
   const auditProgressPct = ((cappedAuditTrades / 20) * 100).toFixed(0);
 
   // Filtered trades for table
   let runningBal = startingBalance;
-  const tradesWithBalance = trades.map((t, idx) => {
+  const tradesWithBalance = recalculatedTrades.map((t, idx) => {
     runningBal += t.pnl;
     return { ...t, index: idx + 1, balanceAfter: runningBal };
   });
@@ -1552,12 +2037,33 @@ export default function App() {
   let peakGain = 0;
   let maxDrawdown = 0;
   let runningCum = 0;
-  trades.forEach(t => {
+  recalculatedTrades.forEach(t => {
     runningCum += t.pnl;
     if (runningCum > peakGain) peakGain = runningCum;
     if (runningCum < maxDrawdown) maxDrawdown = runningCum;
   });
   const distanceToTarget = Math.max(0, milestoneTarget - netPnL);
+
+  // Group recalculated trades by YYYY-MM-DD for Trading P&L Calendar
+  const dailyTradeStats = new Map<string, { pnl: number; count: number }>();
+  recalculatedTrades.forEach(t => {
+    const dateKey = (t.tradeDate || '').slice(0, 10);
+    if (!dateKey) return;
+    const prev = dailyTradeStats.get(dateKey) || { pnl: 0, count: 0 };
+    dailyTradeStats.set(dateKey, {
+      pnl: prev.pnl + t.pnl,
+      count: prev.count + 1
+    });
+  });
+
+  const pnlCalYear = pnlCalendarMonth.getFullYear();
+  const pnlCalMonthIdx = pnlCalendarMonth.getMonth();
+  const pnlCalMonthLabel = pnlCalendarMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const pnlCalDaysInMonth = new Date(pnlCalYear, pnlCalMonthIdx + 1, 0).getDate();
+  const pnlCalLeadingBlanks = (new Date(pnlCalYear, pnlCalMonthIdx, 1).getDay() + 6) % 7;
+  const pnlCalTotalCells = Math.ceil((pnlCalLeadingBlanks + pnlCalDaysInMonth) / 7) * 7;
+  const nowLocal = new Date();
+  const todayIsoKey = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
 
   // Initialize and Reactively Update Chart.js Trajectory Canvas
   useEffect(() => {
@@ -1569,16 +2075,58 @@ export default function App() {
     const labels: string[] = ['Start'];
     const dataPoints: number[] = [0];
     let cum = 0;
-    trades.forEach((t, i) => {
+    recalculatedTrades.forEach((t, i) => {
       cum += t.pnl;
       labels.push(`Trade ${i + 1}`);
       dataPoints.push(cum);
     });
+    const milestoneLineData = labels.map(() => milestoneTarget);
+
+    const chartTheme = isBrightMode
+      ? {
+          pointBorderColor: '#ffffff',
+          legendColor: '#475569',
+          tooltipBg: '#ffffff',
+          tooltipTitle: '#0f172a',
+          tooltipBody: '#059669',
+          tooltipBorder: '#e2e8f0',
+          gridX: 'rgba(15, 23, 42, 0.06)',
+          gridY: 'rgba(15, 23, 42, 0.07)',
+          tickColor: '#475569'
+        }
+      : {
+          pointBorderColor: '#07090e',
+          legendColor: '#94a3b8',
+          tooltipBg: '#0a0f1d',
+          tooltipTitle: '#e2e8f0',
+          tooltipBody: '#38bdf8',
+          tooltipBorder: 'rgba(255, 255, 255, 0.1)',
+          gridX: 'rgba(255, 255, 255, 0.04)',
+          gridY: 'rgba(255, 255, 255, 0.05)',
+          tickColor: '#64748b'
+        };
 
     if (chartInstanceRef.current) {
       chartInstanceRef.current.data.labels = labels;
       chartInstanceRef.current.data.datasets[0].data = dataPoints;
-      chartInstanceRef.current.data.datasets[1].data = labels.map(() => milestoneTarget);
+      (chartInstanceRef.current.data.datasets[0] as any).pointBorderColor = chartTheme.pointBorderColor;
+      if (chartInstanceRef.current.data.datasets[1]) {
+        chartInstanceRef.current.data.datasets[1].data = milestoneLineData;
+      }
+      const opts = chartInstanceRef.current.options;
+      if (opts.plugins?.legend?.labels) {
+        opts.plugins.legend.labels.color = chartTheme.legendColor;
+      }
+      if (opts.plugins?.tooltip) {
+        opts.plugins.tooltip.backgroundColor = chartTheme.tooltipBg;
+        opts.plugins.tooltip.titleColor = chartTheme.tooltipTitle;
+        opts.plugins.tooltip.bodyColor = chartTheme.tooltipBody;
+        opts.plugins.tooltip.borderColor = chartTheme.tooltipBorder;
+      }
+      if (opts.scales?.x?.grid) opts.scales.x.grid.color = chartTheme.gridX;
+      if (opts.scales?.x?.ticks) opts.scales.x.ticks.color = chartTheme.tickColor;
+      if (opts.scales?.y?.grid) opts.scales.y.grid.color = chartTheme.gridY;
+      if (opts.scales?.y?.ticks) opts.scales.y.ticks.color = chartTheme.tickColor;
       chartInstanceRef.current.update();
       return;
     }
@@ -1589,13 +2137,21 @@ export default function App() {
         labels,
         datasets: [
           {
-            label: 'Target 10,000',
+            label: 'Cumulative P&L (₱)',
             data: dataPoints,
             borderWidth: 2.5,
             tension: 0.25,
             pointRadius: 4,
             pointHoverRadius: 6,
-            pointBackgroundColor: '#10b981',
+            pointBackgroundColor: (context) => {
+              const index = context.dataIndex;
+              if (index === 0) return '#64748b';
+              const cur = Number(context.dataset.data[index] ?? 0);
+              const prev = Number(context.dataset.data[index - 1] ?? 0);
+              return cur >= prev ? '#10b981' : '#f43f5e';
+            },
+            pointBorderColor: chartTheme.pointBorderColor,
+            pointBorderWidth: 2,
             segment: {
               borderColor: (ctxSegment) => {
                 const prev = ctxSegment.p0.parsed?.y ?? 0;
@@ -1609,7 +2165,16 @@ export default function App() {
               below: 'rgba(244, 63, 94, 0.08)'
             }
           },
-
+          {
+            label: '₱10,000 Milestone',
+            data: milestoneLineData,
+            borderColor: '#f59e0b',
+            borderWidth: 1.5,
+            borderDash: [6, 6],
+            pointRadius: 0,
+            fill: false,
+            tension: 0
+          }
         ]
       },
       options: {
@@ -1627,7 +2192,7 @@ export default function App() {
             display: true,
             position: 'top',
             labels: {
-              color: '#94a3b8',
+              color: chartTheme.legendColor,
               font: {
                 family: 'monospace',
                 size: 11
@@ -1637,10 +2202,10 @@ export default function App() {
             }
           },
           tooltip: {
-            backgroundColor: '#0a0f1d',
-            titleColor: '#e2e8f0',
-            bodyColor: '#38bdf8',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
+            backgroundColor: chartTheme.tooltipBg,
+            titleColor: chartTheme.tooltipTitle,
+            bodyColor: chartTheme.tooltipBody,
+            borderColor: chartTheme.tooltipBorder,
             borderWidth: 1,
             titleFont: { family: 'monospace', size: 12 },
             bodyFont: { family: 'monospace', size: 12 },
@@ -1658,19 +2223,19 @@ export default function App() {
         scales: {
           x: {
             grid: {
-              color: 'rgba(255, 255, 255, 0.04)'
+              color: chartTheme.gridX
             },
             ticks: {
-              color: '#64748b',
+              color: chartTheme.tickColor,
               font: { family: 'monospace', size: 10 }
             }
           },
           y: {
             grid: {
-              color: 'rgba(255, 255, 255, 0.05)'
+              color: chartTheme.gridY
             },
             ticks: {
-              color: '#64748b',
+              color: chartTheme.tickColor,
               font: { family: 'monospace', size: 10 },
               callback: (value) => `₱${Number(value).toLocaleString()}`
             }
@@ -1687,7 +2252,7 @@ export default function App() {
         chartInstanceRef.current = null;
       }
     };
-  }, [activeTab, trades]);
+  }, [activeTab, trades, isBrightMode]);
 
   /* -------------------------------------------------------------
      AUTHENTICATION GATE OVERLAY
@@ -1764,11 +2329,14 @@ export default function App() {
      MAIN TERMINAL DASHBOARD
   -------------------------------------------------------------- */
   return (
-    <div className="min-h-screen flex flex-col text-slate-200">
+    <div
+      data-theme={isBrightMode ? 'bright' : undefined}
+      className={`min-h-screen flex flex-col text-slate-200 ${isBrightMode ? 'bright-mode' : ''}`}
+    >
       
       {/* HEADER ECOSYSTEM */}
       <header className="border-b border-hairline bg-[#07090e]/95 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
           
           {/* Left: Brand & Identity */}
           <div className="flex items-center gap-3">
@@ -1805,7 +2373,7 @@ export default function App() {
 
             {/* Staggered Tier Badge */}
             {(() => {
-              const tierInfo = getTierBadge(currentStudent?.tier);
+              const tierInfo = getTierBadge(currentStudent?.tier, currentStudent?.full_name);
               return (
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-mono text-xs font-bold ${tierInfo.badgeClass}`}>
                   <span className={`w-2 h-2 rounded-full ${tierInfo.dotClass}`}></span>
@@ -1862,10 +2430,27 @@ export default function App() {
                 setAudioEnabled(!audioEnabled);
                 playTone(660);
               }}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
               title="Toggle Institutional Terminal Audio Blips"
             >
               {audioEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4" />}
+            </button>
+
+            {/* Bright Mode / Dark Mode Toggle Action */}
+            <button
+              onClick={() => {
+                setIsBrightMode((prev) => !prev);
+                playTone(720, 'sine', 0.05);
+              }}
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              title={isBrightMode ? 'Switch to Dark Mode' : 'Switch to Bright Mode'}
+              aria-label={isBrightMode ? 'Switch to Dark Mode' : 'Switch to Bright Mode'}
+            >
+              {isBrightMode ? (
+                <Moon className="w-4 h-4 text-slate-700" />
+              ) : (
+                <Sun className="w-4 h-4 text-amber-400" />
+              )}
             </button>
 
           </div>
@@ -1873,7 +2458,7 @@ export default function App() {
         </div>
 
         {/* WORKSPACE NAVIGATION TABS */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-hairline">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 border-t border-hairline">
           <nav className="flex space-x-1 sm:space-x-2 py-2 overflow-x-auto scrollbar-none">
             <button
               onClick={() => {
@@ -1925,12 +2510,62 @@ export default function App() {
                 {trades.length}/20
               </span>
             </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('quizzes');
+                playTone(550, 'sine', 0.04);
+              }}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold tracking-wide border transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                activeTab === 'quizzes'
+                  ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+              }`}
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              <span>QUIZZES</span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                  quizProgress.passedSections.length > 0
+                    ? 'bg-emerald-950 border border-emerald-500/30 text-emerald-400'
+                    : 'bg-slate-800 text-slate-300'
+                }`}
+              >
+                {quizProgress.passedSections.length}/4
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('simulator');
+                playTone(550, 'sine', 0.04);
+              }}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold tracking-wide border transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                activeTab === 'simulator'
+                  ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+              }`}
+            >
+              <CandlestickChart className="w-4 h-4" />
+              <span>SIMULATOR</span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                  overallSimulatorHighScore > 0
+                    ? 'bg-emerald-950 border border-emerald-500/30 text-emerald-400'
+                    : 'bg-slate-800 text-slate-300'
+                }`}
+              >
+                {overallSimulatorHighScore > 0 ? `${overallSimulatorHighScore} PTS` : '50 ROUNDS'}
+              </span>
+            </button>
           </nav>
         </div>
       </header>
 
-      {/* WORKSPACE VIEWPORT */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* WORKSPACE VIEWPORT (TWO-COLUMN LAYOUT WITH STICKY RIGHT RAIL) */}
+      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex flex-col lg:flex-row items-start gap-6">
+          <div className="flex-1 w-full min-w-0">
 
         {/* ============================================================== */}
         {/* TAB 1: SESSION DEFENSE & RISK CLEARANCE                        */}
@@ -2587,9 +3222,8 @@ export default function App() {
 
                 {/* Phase Switcher */}
                 {(() => {
-                  const studentTier = (currentStudent?.tier || 'phase1').toLowerCase();
-                  const isPhase2Locked = studentTier === 'phase1';
-                  const isProLocked = studentTier === 'phase1' || studentTier === 'phase2';
+                  const isPhase2Locked = !isPhase2Unlocked;
+                  const isProLocked = !isProUnlocked;
 
                   return (
                     <div className="flex gap-1.5 p-1 bg-[#0a0d15] rounded-lg border border-hairline mb-3 text-xs font-mono">
@@ -2607,12 +3241,14 @@ export default function App() {
                         onClick={() => handleSwitchCurriculumPhase(2)}
                         className={`flex-1 py-1.5 rounded-md font-bold text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${
                           curriculumPhase === 2
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            ? isPhase2Locked
+                              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40'
+                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                             : isPhase2Locked
                             ? 'text-slate-500 hover:text-slate-400 bg-slate-900/40'
                             : 'text-slate-400 hover:text-white'
                         }`}
-                        title={isPhase2Locked ? 'Locked for Phase 1 Tier' : 'Phase 2 Lessons'}
+                        title={isPhase2Locked ? 'Preview Locked for Phase 1 Tier' : 'Phase 2 Lessons'}
                       >
                         <span>PHASE 2 (01 - 07)</span>
                         {isPhase2Locked && <span className="text-[11px]">🔒</span>}
@@ -2635,66 +3271,82 @@ export default function App() {
                   );
                 })()}
 
-                {/* Lesson List */}
-                <div className="space-y-2 max-h-[580px] overflow-y-auto pr-1">
-                  {(curriculumPhase === 1
+                {/* Lesson List (Blurred/Locked Preview when viewing Phase 2 on a Phase 1 account) */}
+                {(() => {
+                  const isPhase2PreviewLocked = curriculumPhase === 2 && !isPhase2Unlocked;
+                  const currentPhaseLessons = curriculumPhase === 1
                     ? PHASE_1_LESSONS
                     : curriculumPhase === 2
                     ? PHASE_2_LESSONS
-                    : PRO_ARCHIVES_LESSONS
-                  ).map(lesson => {
-                    const currentPhaseLessons = curriculumPhase === 1
-                      ? PHASE_1_LESSONS
-                      : curriculumPhase === 2
-                      ? PHASE_2_LESSONS
-                      : PRO_ARCHIVES_LESSONS;
-                    const isCurrent = lesson.id === activeLesson.id;
-                    const isVerified = unlockedKeywords.includes(lesson.id);
-                    const isUnlocked = isLessonUnlocked(lesson, currentPhaseLessons, unlockedKeywords);
-                    const isLocked = !isUnlocked;
+                    : PRO_ARCHIVES_LESSONS;
 
-                    return (
+                  return (
+                    <div className="relative rounded-xl overflow-hidden">
                       <div
-                        key={lesson.id}
-                        onClick={() => handleSelectLesson(lesson)}
-                        className={`p-3 rounded-lg border transition-all flex items-center justify-between gap-3 ${
-                          isLocked
-                            ? 'opacity-50 hover:opacity-70 bg-[#07090e] border-slate-800/60 cursor-not-allowed select-none'
-                            : isCurrent
-                            ? 'bg-emerald-950/30 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.15)] cursor-pointer'
-                            : 'bg-[#0a0d15] border-hairline hover:bg-slate-800/40 hover:border-slate-700 cursor-pointer'
+                        className={`space-y-2 max-h-[580px] overflow-y-auto pr-1 ${
+                          isPhase2PreviewLocked ? 'blur-[2.5px] opacity-40 grayscale pointer-events-none select-none' : ''
                         }`}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className={`font-mono text-xs font-bold ${isCurrent ? 'text-emerald-400' : isLocked ? 'text-slate-600' : 'text-slate-500'}`}>
-                            {lesson.num}
-                          </span>
-                          <div className="truncate">
-                            <h5 className={`text-xs font-semibold ${isCurrent ? 'text-white' : isLocked ? 'text-slate-500' : 'text-slate-300'} truncate flex items-center gap-1.5`}>
-                              <span>{lesson.title}</span>
-                            </h5>
-                            <span className="text-[10px] font-mono text-slate-500">{lesson.duration}</span>
+                        {currentPhaseLessons.map(lesson => {
+                          const isCurrent = lesson.id === activeLesson.id;
+                          const isVerified = unlockedKeywords.includes(lesson.id);
+                          const isUnlocked = isLessonUnlocked(lesson, currentPhaseLessons, unlockedKeywords);
+                          const isLocked = !isUnlocked;
+
+                          return (
+                            <div
+                              key={lesson.id}
+                              onClick={() => handleSelectLesson(lesson)}
+                              className={`p-3 rounded-lg border transition-all flex items-center justify-between gap-3 ${
+                                isLocked
+                                  ? 'opacity-50 hover:opacity-70 bg-[#07090e] border-slate-800/60 cursor-not-allowed select-none'
+                                  : isCurrent
+                                  ? 'bg-emerald-950/30 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.15)] cursor-pointer'
+                                  : 'bg-[#0a0d15] border-hairline hover:bg-slate-800/40 hover:border-slate-700 cursor-pointer'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className={`font-mono text-xs font-bold ${isCurrent ? 'text-emerald-400' : isLocked ? 'text-slate-600' : 'text-slate-500'}`}>
+                                  {lesson.num}
+                                </span>
+                                <div className="truncate">
+                                  <h5 className={`text-xs font-semibold ${isCurrent ? 'text-white' : isLocked ? 'text-slate-500' : 'text-slate-300'} truncate flex items-center gap-1.5`}>
+                                    <span>{lesson.title}</span>
+                                  </h5>
+                                  <span className="text-[10px] font-mono text-slate-500">{lesson.duration}</span>
+                                </div>
+                              </div>
+                              <div className="shrink-0 flex items-center gap-1.5">
+                                {isVerified ? (
+                                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[11px] font-bold" title="Keyword Verified">
+                                    ✓
+                                  </span>
+                                ) : isLocked ? (
+                                  <span className="w-5 h-5 rounded-full bg-slate-900 border border-slate-800 text-slate-500 flex items-center justify-center text-[11px]" title="Locked Module">
+                                    🔒
+                                  </span>
+                                ) : (
+                                  <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-[10px]" title="Ready To Validate">
+                                    ○
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {isPhase2PreviewLocked && (
+                        <div className="absolute inset-0 flex items-center justify-center p-4">
+                          <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#0e131e] border border-amber-500/40 shadow-lg text-xs font-mono font-bold tracking-wider text-amber-300 text-center">
+                            <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                            <span>LOCKED — SETTLE PHASE 2 TO UNLOCK</span>
                           </div>
                         </div>
-                        <div className="shrink-0 flex items-center gap-1.5">
-                          {isVerified ? (
-                            <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[11px] font-bold" title="Keyword Verified">
-                              ✓
-                            </span>
-                          ) : isLocked ? (
-                            <span className="w-5 h-5 rounded-full bg-slate-900 border border-slate-800 text-slate-500 flex items-center justify-center text-[11px]" title="Locked Module">
-                              🔒
-                            </span>
-                          ) : (
-                            <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-[10px]" title="Ready To Validate">
-                              ○
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -2933,7 +3585,7 @@ export default function App() {
               </div>
 
               <form onSubmit={handleCommitTrade}>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2 items-end">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 items-end">
                   {/* 1. DATE */}
                   <div className="col-span-1">
                     <label className="block text-[10px] font-mono text-slate-400 mb-1 font-semibold uppercase">DATE</label>
@@ -3046,14 +3698,12 @@ export default function App() {
                       className="w-full bg-[#0a0d15] border border-slate-700 rounded-md py-1.5 px-2 text-xs font-mono text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                     >
                       <option value="Take Profit (TP)">Take Profit (TP)</option>
-                      <option value="Breakeven (BE)">Breakeven (BE)</option>
                       <option value="Stop Loss (SL)">Stop Loss (SL)</option>
+                      <option value="Breakeven (BE)">Breakeven (BE)</option>
                     </select>
                   </div>
 
-          
-
-                  {/* 9. COMMIT TRADE BUTTON */}
+                  {/* 8. COMMIT TRADE BUTTON */}
                   <div className="col-span-2 sm:col-span-1">
                     <button
                       type="submit"
@@ -3062,6 +3712,41 @@ export default function App() {
                       <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">COMMIT</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* Live Dynamic R:R & P&L Preview Pill */}
+                <div className="mt-2.5 pt-2.5 border-t border-hairline flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <span>Base Risk Mandate: <strong className="text-slate-200">1R = ₱1,000</strong></span>
+                  </div>
+                  <div
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-semibold ${
+                      liveTradePreview.outcomeType === 'SL'
+                        ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                        : liveTradePreview.outcomeType === 'BE'
+                        ? 'bg-slate-800/80 border-slate-700 text-slate-300'
+                        : liveTradePreview.hasValidBracket
+                        ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                        : 'bg-[#0a0d15] border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                    {liveTradePreview.outcomeType === 'SL' ? (
+                      <span>
+                        Detected R:R → {liveTradePreview.hasValidBracket ? `1:${liveTradePreview.rrr} · ` : ''}SL -1R (-₱1,000)
+                      </span>
+                    ) : liveTradePreview.outcomeType === 'BE' ? (
+                      <span>
+                        Detected R:R → {liveTradePreview.hasValidBracket ? `1:${liveTradePreview.rrr} · ` : ''}BE 0R (₱0)
+                      </span>
+                    ) : liveTradePreview.hasValidBracket ? (
+                      <span>
+                        Detected R:R → 1:{liveTradePreview.rrr} (+₱{liveTradePreview.pnl.toLocaleString()})
+                      </span>
+                    ) : (
+                      <span>Detected R:R → Enter Entry, SL &amp; TP to calculate</span>
+                    )}
                   </div>
                 </div>
               </form>
@@ -3096,12 +3781,17 @@ export default function App() {
                   </button>
 
                   <button
-                    onClick={handleResetAuditBlock}
-                    className="px-3 py-1.5 rounded-lg bg-rose-950/20 border border-rose-500/30 hover:bg-rose-900/30 text-rose-300 transition-all flex items-center gap-1.5 cursor-pointer"
-                    title="Reset current 20-trade cycle"
+                    type="button"
+                    onClick={handleResetAllTrades}
+                    className={`px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer ${
+                      confirmResetAll
+                        ? 'bg-rose-600 border-rose-400 text-white font-bold shadow-[0_0_15px_rgba(244,63,94,0.35)]'
+                        : 'bg-rose-950/20 border-rose-500/30 hover:bg-rose-900/30 text-rose-300'
+                    }`}
+                    title="Reset all logged trades"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Reset 20-Trade Block</span>
+                    <span>{confirmResetAll ? 'Confirm Reset?' : 'Reset All Trades'}</span>
                   </button>
                 </div>
               </div>
@@ -3127,21 +3817,15 @@ export default function App() {
                       const isLoss = t.pnl < 0;
                       let resultBadge = '';
                       const resStr = String(t.result);
-                      if (resStr.includes('SL')) {
+                      if (isLoss || resStr.includes('SL')) {
                         resultBadge = 'bg-rose-950/80 border-rose-500/40 text-rose-400';
-                      } else if (resStr.includes('BE') || resStr.includes('0.0R')) {
+                      } else if (!isWin || resStr.includes('BE')) {
                         resultBadge = 'bg-slate-800 border-slate-700 text-slate-300';
                       } else {
                         resultBadge = 'bg-emerald-950/80 border-emerald-500/40 text-emerald-400';
                       }
 
-                      const outcomeText = resStr.includes('SL')
-                        ? 'SL -1R'
-                        : resStr.includes('BE') || resStr.includes('0.0R')
-                        ? 'BE'
-                        : resStr.includes('1:1')
-                        ? 'TP 1:1'
-                        : 'TP 1:3';
+                      const outcomeText = resStr;
 
                       const timeClean = (t.executionTime || '09:30 PM').replace(' PHT', '');
                       const dateClean = t.tradeDate || '2026-11-11';
@@ -3207,6 +3891,7 @@ export default function App() {
                           {/* 8. ACTION */}
                           <td className="py-2.5 px-3 text-right">
                             <button
+                              type="button"
                               onClick={() => handleDeleteTrade(t.id)}
                               className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition-colors"
                               title="Delete trade"
@@ -3301,14 +3986,230 @@ export default function App() {
               </div>
             </div>
 
+            {/* Monthly Trading P&L Calendar */}
+            <div className="glass-card rounded-xl p-4 sm:p-5 border-hairline bg-[#0a0f1d]">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-hairline mb-4 gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wide font-mono">
+                    TRADING P&amp;L CALENDAR
+                  </h4>
+                </div>
+
+                {/* Month Switcher */}
+                <div className="flex items-center gap-1.5 bg-[#070a12] border border-hairline rounded-lg p-1 font-mono text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPnlCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+                      playTone(500, 'sine', 0.03);
+                    }}
+                    className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-800/70 transition-colors cursor-pointer"
+                    title="Previous month"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-2.5 font-semibold text-white min-w-[130px] text-center">
+                    {pnlCalMonthLabel}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPnlCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+                      playTone(540, 'sine', 0.03);
+                    }}
+                    className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-800/70 transition-colors cursor-pointer"
+                    title="Next month"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 7-Column Monday-Sunday Header */}
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2">
+                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((dayName) => (
+                  <div
+                    key={dayName}
+                    className="text-center py-1.5 rounded bg-[#070a12] border border-hairline text-[10px] sm:text-xs font-mono font-semibold text-slate-400 truncate px-1"
+                  >
+                    {dayName}
+                  </div>
+                ))}
+              </div>
+
+              {/* Calendar Grid Cells */}
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                {Array.from({ length: pnlCalTotalCells }).map((_, cellIdx) => {
+                  const dayNum = cellIdx - pnlCalLeadingBlanks + 1;
+                  const isValidDay = dayNum >= 1 && dayNum <= pnlCalDaysInMonth;
+
+                  if (!isValidDay) {
+                    return (
+                      <div
+                        key={`blank-${cellIdx}`}
+                        className="min-h-[78px] sm:min-h-[92px] rounded-lg bg-[#060910]/60 border border-white/[0.03]"
+                      />
+                    );
+                  }
+
+                  const dayTwoDigit = String(dayNum).padStart(2, '0');
+                  const dateKey = `${pnlCalYear}-${String(pnlCalMonthIdx + 1).padStart(2, '0')}-${dayTwoDigit}`;
+                  const isToday = dateKey === todayIsoKey;
+                  const colIndex = cellIdx % 7; // 0 = Monday ... 5 = Saturday, 6 = Sunday
+                  const isWeekend = colIndex === 5 || colIndex === 6;
+                  const stats = dailyTradeStats.get(dateKey);
+                  const hasTrades = !!stats && stats.count > 0;
+
+                  let cellClasses = 'bg-[#070a12] border border-hairline';
+                  if (hasTrades && stats) {
+                    if (stats.pnl > 0) {
+                      cellClasses = 'bg-emerald-950/35 border border-emerald-500/30 border-t-2 border-t-emerald-400 shadow-[inset_0_1px_12px_rgba(16,185,129,0.08)]';
+                    } else if (stats.pnl < 0) {
+                      cellClasses = 'bg-rose-950/35 border border-rose-500/30 border-t-2 border-t-rose-400 shadow-[inset_0_1px_12px_rgba(244,63,94,0.08)]';
+                    } else {
+                      cellClasses = 'bg-slate-800/40 border border-slate-600/50 border-t-2 border-t-slate-400';
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={dateKey}
+                      className={`min-h-[78px] sm:min-h-[92px] rounded-lg p-2 flex flex-col justify-between transition-all ${cellClasses}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <span
+                          className={`text-[11px] sm:text-xs font-mono num-mono font-bold ${
+                            isToday
+                              ? 'px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : hasTrades
+                              ? 'text-slate-200'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {dayTwoDigit}
+                        </span>
+                      </div>
+
+                      {hasTrades && stats ? (
+                        <div className="mt-1">
+                          <div
+                            className={`text-[11px] sm:text-xs font-mono font-bold num-mono truncate ${
+                              stats.pnl > 0
+                                ? 'text-emerald-400'
+                                : stats.pnl < 0
+                                ? 'text-rose-400'
+                                : 'text-slate-300'
+                            }`}
+                          >
+                            {stats.pnl > 0
+                              ? `+₱${stats.pnl.toLocaleString()} ▲`
+                              : stats.pnl < 0
+                              ? `-₱${Math.abs(stats.pnl).toLocaleString()} ▼`
+                              : '₱0'}
+                          </div>
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <span
+                              className={`text-[10px] font-mono ${
+                                stats.pnl > 0
+                                  ? 'text-emerald-300/80'
+                                  : stats.pnl < 0
+                                  ? 'text-rose-300/80'
+                                  : 'text-slate-400'
+                              }`}
+                            >
+                              {stats.count} {stats.count === 1 ? 'Trade' : 'Trades'}
+                            </span>
+                            {isWeekend && (
+                              <span className="text-[9px] font-mono text-slate-500">Weekend</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-auto">
+                          {isWeekend && (
+                            <span className="text-[10px] font-mono text-slate-600">Weekend</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
           </div>
         )}
 
+        {/* ============================================================== */}
+        {/* TAB 4: QUIZZES & SEQUENTIAL CERTIFICATION EXAM                 */}
+        {/* ============================================================== */}
+        {activeTab === 'quizzes' && (
+          <QuizzesTab
+            studentId={currentStudent?.id}
+            isPhase2Unlocked={isPhase2Unlocked}
+            isMasterAccount={isMasterAccount}
+            progress={quizProgress}
+            onSaveProgress={handleSaveQuizProgress}
+            onPlayTone={playTone}
+            onPlaySuccess={playSuccessChime}
+            onPlayError={playErrorTone}
+          />
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 5: TRADE OR PASS // EXECUTION SIMULATOR                    */}
+        {/* ============================================================== */}
+        {activeTab === 'simulator' && (
+          <SimulatorTab
+            studentId={currentStudent?.id}
+            isBrightMode={isBrightMode}
+            isPhase2Unlocked={isPhase2Unlocked}
+            tierStats={simulatorTierStats}
+            onUpdateTierStats={handleUpdateSimulatorTierStats}
+            onPlayTone={playTone}
+            onPlaySuccess={playSuccessChime}
+            onPlayError={playErrorTone}
+          />
+        )}
+
+          </div>
+
+          {(() => {
+            const p1Total = PHASE_1_LESSONS.length;
+            const p1Completed = PHASE_1_LESSONS.filter(l => isLessonVerified(l.id, unlockedKeywords)).length;
+            const availableP2 = PHASE_2_LESSONS.filter(l => l.duration.toUpperCase() !== 'TBD');
+            const p2Total = availableP2.length;
+            const p2Completed = availableP2.filter(l => isLessonVerified(l.id, unlockedKeywords)).length;
+
+            return (
+              <TraderProgressRail
+                phase1Completed={p1Completed}
+                phase1Total={p1Total}
+                phase2Completed={p2Completed}
+                phase2Total={p2Total}
+                isPhase2Unlocked={isPhase2Unlocked}
+                netPnL={netPnL}
+                profitGoalTarget={10000}
+                passedQuizSections={quizProgress.passedSections.length}
+                totalQuizSections={4}
+                onNavigateTab={(tab, phase) => {
+                  setActiveTab(tab);
+                  if (tab === 'vault' && phase) {
+                    handleSwitchCurriculumPhase(phase);
+                  } else {
+                    playTone(550, 'sine', 0.04);
+                  }
+                }}
+              />
+            );
+          })()}
+        </div>
       </main>
 
       {/* FOOTER */}
       <footer className="border-t border-hairline bg-[#07090e]/80 py-4 px-4 sm:px-6 lg:px-8 text-xs font-mono text-slate-500 mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span>RYAN JADE MECHANICAL TRADING DESK</span>
