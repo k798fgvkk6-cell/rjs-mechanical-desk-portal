@@ -102,7 +102,7 @@ export const AiTradeReviewCard: React.FC<AiTradeReviewCardProps> = ({
               </span>
             </div>
             <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-              RJS Mechanical USTECH100 Risk &amp; Tilt Audit · Gemini 2.5 Flash
+              RJS Mechanical USTECH100 Risk &amp; Tilt Audit · Gemini 3.8 Flash
             </p>
           </div>
         </div>

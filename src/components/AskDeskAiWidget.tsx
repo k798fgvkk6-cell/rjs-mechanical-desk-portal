@@ -157,7 +157,7 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 </div>
                 <div className="text-[10px] font-mono text-slate-400">
-                  USTECH100 Playbook · Gemini 2.5 Flash
+                  USTECH100 Playbook · Gemini 3.8 Flash
                 </div>
               </div>
             </div>
@@ -216,7 +216,7 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
                 )}
               </div>
               <p className="text-[10px] font-mono text-slate-400">
-                Saved locally in your browser (rjs_gemini_api_key) for direct Gemini 2.5 Flash requests.
+                Saved locally in your browser (rjs_gemini_api_key) for direct Gemini 3.8 Flash requests.
               </p>
               <form onSubmit={handleSaveKey} className="flex items-center gap-1.5">
                 <input

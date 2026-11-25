@@ -1658,7 +1658,7 @@
                 <span class="text-xs font-mono font-bold uppercase tracking-wider text-white">ASK RJS DESK AI</span>
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               </div>
-              <div class="text-[10px] font-mono text-slate-400">USTECH100 Playbook · Gemini 2.5 Flash</div>
+              <div class="text-[10px] font-mono text-slate-400">USTECH100 Playbook · Gemini 3.8 Flash</div>
             </div>
           </div>
           <div class="flex items-center gap-1">
@@ -9600,7 +9600,7 @@
        GEMINI AI TRADE LOGBOOK REVIEW & ASK RJS DESK AI MENTOR
        (Direct Browser @google/genai SDK — Static GitHub Pages Host)
     -------------------------------------------------------------- */
-    const GEMINI_MODEL = 'gemini-2.5-flash';
+    const GEMINI_MODEL = 'gemini-3.8-flash';
     const GEMINI_KEY_STORAGE = 'rjs_gemini_api_key';
 
     let aiReviewState = { loading: false, error: null, data: null, needsKey: false };
@@ -9865,7 +9865,7 @@ Keep responses crisp, practical, structured with short bullets when helpful, and
                 <h4 class="text-xs sm:text-sm font-bold text-white uppercase tracking-wide font-mono">AI DESK PERFORMANCE REVIEW</h4>
                 <span class="px-2 py-0.5 rounded-md bg-[#0e131e] border border-hairline text-[10px] font-mono text-slate-300">${periodText}</span>
               </div>
-              <p class="text-[11px] font-mono text-slate-400 mt-0.5">RJS Mechanical USTECH100 Risk &amp; Tilt Audit · Gemini 2.5 Flash</p>
+              <p class="text-[11px] font-mono text-slate-400 mt-0.5">RJS Mechanical USTECH100 Risk &amp; Tilt Audit · Gemini 3.8 Flash</p>
             </div>
           </div>
           <div class="flex items-center gap-1.5">
@@ -10097,7 +10097,7 @@ ${JSON.stringify(compactRows)}`;
               <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400">Enter Gemini API Key</span>
               ${deskAiShowKeyEditor && !deskAiNeedsKey ? '<button type="button" onclick="toggleDeskAiKeyEditor()" class="text-[10px] font-mono text-slate-400 hover:text-white cursor-pointer">Hide</button>' : ''}
             </div>
-            <p class="text-[10px] font-mono text-slate-400">Saved locally in your browser (rjs_gemini_api_key) for direct Gemini 2.5 Flash requests.</p>
+            <p class="text-[10px] font-mono text-slate-400">Saved locally in your browser (rjs_gemini_api_key) for direct Gemini 3.8 Flash requests.</p>
             <form onsubmit="saveDeskAiKeyForm(event)" class="flex items-center gap-1.5">
               <input id="askDeskAiKeyInput" type="password" value="${escapeQuizHtml(getLocalGeminiApiKey())}" placeholder="AIza..." class="flex-1 bg-[#0a0d15] border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" />
               <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[11px] font-bold cursor-pointer">Save Key</button>
