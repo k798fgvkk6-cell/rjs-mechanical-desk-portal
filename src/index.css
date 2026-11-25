@@ -3,15 +3,11 @@
 
 @layer base {
   body {
-    background-color: #07090e;
+    background-color: #090D16;
     color: #e2e8f0;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     min-height: 100vh;
-    background-image: 
-      radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.05) 0%, transparent 45%),
-      linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-    background-size: 100% 100%, 36px 36px, 36px 36px;
+    background-image: none;
   }
 }
 
@@ -48,13 +44,9 @@
 html.bright-mode,
 html.bright-mode body,
 .bright-mode {
-  background-color: #f4f6f9 !important;
+  background-color: #f8fafc !important;
   color: #0f172a !important;
-  background-image:
-    radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.06) 0%, transparent 45%),
-    linear-gradient(to right, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(15, 23, 42, 0.035) 1px, transparent 1px) !important;
-  background-size: 100% 100%, 36px 36px, 36px 36px !important;
+  background-image: none !important;
 }
 
 /* Header, Footer & Main Card Surfaces */
@@ -95,8 +87,9 @@ html.bright-mode body,
 }
 
 /* Keep fixed login backdrop and video containers clean */
-.bright-mode .fixed.inset-0[class*="bg-[#07090e]"] {
-  background-color: #f4f6f9 !important;
+.bright-mode .fixed.inset-0[class*="bg-[#07090e]"],
+.bright-mode .fixed.inset-0[class*="bg-[#090D16]"] {
+  background-color: #f8fafc !important;
 }
 
 .bright-mode .bg-black {

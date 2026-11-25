@@ -52,18 +52,14 @@
   </script>
 
   <style>
-    /* Custom Institutional Tactical Desk Grid */
+    /* Clean Solid Institutional Desk Background */
     body {
-      background-color: #07090e;
+      background-color: #090D16;
       color: #e2e8f0;
       font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
       min-height: 100vh;
       overflow-x: hidden;
-      background-image: 
-        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.05) 0%, transparent 45%),
-        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-      background-size: 100% 100%, 36px 36px, 36px 36px;
+      background-image: none;
     }
 
     /* Monospace Tabular Figures */
@@ -130,12 +126,8 @@
 
     /* Full-screen Login Backdrop */
     .auth-grid-bg {
-      background-color: #07090e;
-      background-image: 
-        radial-gradient(circle at 50% 30%, rgba(16, 185, 129, 0.08) 0%, transparent 60%),
-        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-      background-size: 100% 100%, 36px 36px, 36px 36px;
+      background-color: #090D16;
+      background-image: none;
     }
 
     /* ============================================================================
@@ -144,22 +136,14 @@
     html.bright-mode,
     html.bright-mode body,
     .bright-mode {
-      background-color: #f4f6f9 !important;
+      background-color: #f8fafc !important;
       color: #0f172a !important;
-      background-image:
-        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.06) 0%, transparent 45%),
-        linear-gradient(to right, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(15, 23, 42, 0.035) 1px, transparent 1px) !important;
-      background-size: 100% 100%, 36px 36px, 36px 36px !important;
+      background-image: none !important;
     }
 
     .bright-mode .auth-grid-bg {
-      background-color: #f4f6f9 !important;
-      background-image:
-        radial-gradient(circle at 50% 30%, rgba(16, 185, 129, 0.07) 0%, transparent 60%),
-        linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px) !important;
-      background-size: 100% 100%, 36px 36px, 36px 36px !important;
+      background-color: #f8fafc !important;
+      background-image: none !important;
     }
 
     html.bright-mode ::-webkit-scrollbar-track {
@@ -527,6 +511,21 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
             <span>ADMIN: STUDENTS</span>
+          </button>
+
+          <!-- Admin-Only Assignment Review Queue Button (Strictly Ryan Jade MASTER) -->
+          <button
+            id="btnAdminAssignments"
+            type="button"
+            onclick="openAdminAssignmentsModal()"
+            class="hidden px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:text-white hover:bg-amber-500/25 hover:border-amber-400 font-mono text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Master Admin: Review Student Assignments & Chart Markups"
+          >
+            <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+            <span>ADMIN: ASSIGNMENTS</span>
+            <span id="adminAssignmentsPendingBadge" class="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold num-mono bg-[#0e131e] border border-hairline text-slate-300">0</span>
           </button>
 
           <!-- Sleek LOG OUT Button in Header -->
@@ -1111,6 +1110,11 @@
 
               </div>
 
+            </div>
+
+            <!-- PER-LESSON ASSIGNMENT & CHART MARKUP SUBMISSION PANEL -->
+            <div id="lessonAssignmentPanelCard" class="glass-card rounded-xl p-5 border-hairline space-y-4">
+              <!-- Populated dynamically per lesson -->
             </div>
           </div>
 
@@ -1710,8 +1714,114 @@
     </div>
   </div>
 
+  <!-- ============================================================== -->
+  <!-- MODAL: ADMIN-ONLY ASSIGNMENT REVIEW QUEUE (MASTER ONLY)        -->
+  <!-- ============================================================== -->
+  <div id="adminAssignmentsModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm" onclick="if (event.target === this) closeAdminAssignmentsModal()">
+    <div class="glass-card max-w-5xl w-full rounded-2xl p-5 sm:p-6 border border-amber-500/35 shadow-[0_0_50px_rgba(245,158,11,0.12)] max-h-[90vh] flex flex-col">
+      <!-- Header -->
+      <div class="flex items-start justify-between gap-4 pb-4 border-b border-hairline shrink-0">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center text-amber-400 shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-base sm:text-lg font-bold text-white uppercase tracking-wide">
+                ADMIN // ASSIGNMENT REVIEW QUEUE
+              </h3>
+              <span class="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/35 text-amber-300 font-mono text-[10px] font-bold">
+                MASTER ONLY
+              </span>
+            </div>
+            <p class="text-xs font-mono text-slate-400 mt-0.5">
+              Inspect student chart markups &amp; written breakdowns · Approve or request revision with mentor feedback.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onclick="playTone(560, 'sine', 0.03); fetchAdminAssignmentsQueue();"
+            class="px-3 py-1.5 rounded-lg bg-[#0e131e] border border-hairline hover:border-slate-500 text-slate-300 hover:text-white font-mono text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <svg id="adminAssignmentsRefreshIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span class="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            type="button"
+            onclick="closeAdminAssignmentsModal()"
+            class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors cursor-pointer"
+            aria-label="Close Assignment Review Queue"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary & Filters -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3 py-4 border-b border-hairline shrink-0">
+        <div class="md:col-span-5 flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-[#070a12] border border-hairline font-mono text-[11px]">
+          <button id="adminAssignTab-pending" type="button" onclick="setAdminAssignFilter('pending')" class="flex-1 px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer bg-emerald-500/20 text-emerald-400 border border-emerald-500/35">Pending (0)</button>
+          <button id="adminAssignTab-approved" type="button" onclick="setAdminAssignFilter('approved')" class="flex-1 px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer text-slate-400 hover:text-white border border-transparent">Approved (0)</button>
+          <button id="adminAssignTab-all" type="button" onclick="setAdminAssignFilter('all')" class="flex-1 px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer text-slate-400 hover:text-white border border-transparent">All (0)</button>
+        </div>
+        <div class="md:col-span-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div class="relative flex-1">
+            <svg class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              id="adminAssignSearchInput"
+              type="text"
+              oninput="setAdminAssignSearch(this.value)"
+              placeholder="Search student name or lesson title..."
+              class="w-full bg-[#070a12] border border-hairline rounded-lg pl-8 pr-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <div id="adminAssignRevisionPill" class="hidden px-3 py-2 rounded-lg bg-[#070a12] border border-hairline font-mono text-[11px] text-rose-400 font-bold shrink-0"></div>
+        </div>
+      </div>
+
+      <!-- Queue Body -->
+      <div id="adminAssignmentsQueueBody" class="flex-1 overflow-y-auto pt-4 space-y-4 pr-1">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: FULL-SCREEN CHART SCREENSHOT LIGHTBOX ZOOM              -->
+  <!-- ============================================================== -->
+  <div id="chartLightboxModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md" onclick="if (event.target === this) closeChartLightbox()">
+    <div class="max-w-6xl w-full flex flex-col gap-3 max-h-[94vh]">
+      <div class="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-[#0e131e] border border-hairline">
+        <div id="lightboxCaptionText" class="text-xs font-mono font-bold text-white truncate">Chart Preview</div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="btnLightboxPrev" type="button" onclick="stepChartLightbox(-1)" class="hidden px-2.5 py-1 rounded-lg bg-[#070a12] border border-hairline text-slate-300 hover:text-white font-mono text-xs cursor-pointer">Prev</button>
+          <button id="btnLightboxNext" type="button" onclick="stepChartLightbox(1)" class="hidden px-2.5 py-1 rounded-lg bg-[#070a12] border border-hairline text-slate-300 hover:text-white font-mono text-xs cursor-pointer">Next</button>
+          <button type="button" onclick="closeChartLightbox()" class="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/60 cursor-pointer" aria-label="Close Lightbox">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="flex-1 min-h-0 flex items-center justify-center rounded-2xl overflow-hidden border border-hairline bg-slate-950 p-2">
+        <img id="lightboxImageEl" src="" alt="Chart Lightbox Preview" class="max-w-full max-h-[82vh] object-contain rounded-lg" />
+      </div>
+    </div>
+  </div>
+
   <!-- FLOATING TOAST CONFIRMATION -->
-  <div id="adminToastBanner" class="hidden fixed bottom-5 right-5 z-[60] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all"></div>
+  <div id="adminToastBanner" class="hidden fixed bottom-5 right-5 z-[80] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all"></div>
 
   <!-- ============================================================== -->
   <!-- JAVASCRIPT TERMINAL LOGIC & PERSISTENCE                        -->
@@ -1838,6 +1948,7 @@
       const lockP2 = document.getElementById('lockPhase2');
       const lockPro = document.getElementById('lockProArchives');
       const adminBtn = document.getElementById('btnAdminStudents');
+      const adminAssignBtn = document.getElementById('btnAdminAssignments');
 
       const meta = getTierMeta(student?.tier, student?.full_name);
       const phase2Unlocked = hasPhase2Access(student);
@@ -1853,8 +1964,13 @@
         if (isMaster) adminBtn.classList.remove('hidden');
         else adminBtn.classList.add('hidden');
       }
+      if (adminAssignBtn) {
+        if (isMaster) adminAssignBtn.classList.remove('hidden');
+        else adminAssignBtn.classList.add('hidden');
+      }
       if (!isMaster) {
         closeAdminStudentsModal();
+        if (typeof closeAdminAssignmentsModal === 'function') closeAdminAssignmentsModal();
       }
 
       if (lockP2) {
@@ -1903,6 +2019,7 @@
 
       updateKeywordsCounter();
       renderCurriculumList();
+      if (typeof renderLessonAssignmentPanel === 'function') renderLessonAssignmentPanel();
       if (typeof renderQuizzesTab === 'function') renderQuizzesTab();
       if (typeof renderSimulatorTab === 'function') renderSimulatorTab();
       if (typeof renderTraderProgressRail === 'function') renderTraderProgressRail();
@@ -1910,22 +2027,35 @@
 
     let lastPortalTierSyncAt = 0;
     let studentRealtimeChannel = null;
+    let studentAssignmentsRealtimeChannel = null;
+    let masterPendingAssignmentsChannel = null;
     let studentTierPollInterval = null;
+    let masterPendingPollInterval = null;
 
     function cleanupStudentRealtimeSync() {
       if (studentRealtimeChannel && supabaseClient) {
-        try {
-          supabaseClient.removeChannel(studentRealtimeChannel);
-        } catch {}
+        try { supabaseClient.removeChannel(studentRealtimeChannel); } catch {}
         studentRealtimeChannel = null;
+      }
+      if (studentAssignmentsRealtimeChannel && supabaseClient) {
+        try { supabaseClient.removeChannel(studentAssignmentsRealtimeChannel); } catch {}
+        studentAssignmentsRealtimeChannel = null;
+      }
+      if (masterPendingAssignmentsChannel && supabaseClient) {
+        try { supabaseClient.removeChannel(masterPendingAssignmentsChannel); } catch {}
+        masterPendingAssignmentsChannel = null;
       }
       if (studentTierPollInterval) {
         clearInterval(studentTierPollInterval);
         studentTierPollInterval = null;
       }
+      if (masterPendingPollInterval) {
+        clearInterval(masterPendingPollInterval);
+        masterPendingPollInterval = null;
+      }
     }
 
-    function setupStudentRealtimeSync(studentId) {
+    function setupStudentRealtimeSync(studentId, studentObj) {
       cleanupStudentRealtimeSync();
       if (!supabaseClient || !studentId) return;
 
@@ -1947,11 +2077,55 @@
         )
         .subscribe();
 
+      studentAssignmentsRealtimeChannel = supabaseClient
+        .channel(`portal-student-assignments-${studentId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'lesson_assignments',
+            filter: `student_id=eq.${studentId}`
+          },
+          (payload) => {
+            if (payload && payload.new && payload.new.lesson_id && typeof studentAssignmentsById === 'object') {
+              studentAssignmentsById[payload.new.lesson_id] = payload.new;
+              if (typeof renderLessonAssignmentPanel === 'function') renderLessonAssignmentPanel();
+            }
+          }
+        )
+        .subscribe();
+
       studentTierPollInterval = setInterval(() => {
         if (document.visibilityState !== 'hidden' && currentStudentSession?.id) {
           refreshStudentTierFromSupabase(true);
         }
       }, 15000);
+
+      if (isMasterOrAdminAccount(studentObj || currentStudentSession)) {
+        masterPendingAssignmentsChannel = supabaseClient
+          .channel('portal-master-pending-assignments')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'lesson_assignments'
+            },
+            () => {
+              if (typeof fetchMasterPendingAssignmentsCount === 'function') {
+                fetchMasterPendingAssignmentsCount();
+              }
+            }
+          )
+          .subscribe();
+
+        masterPendingPollInterval = setInterval(() => {
+          if (document.visibilityState !== 'hidden' && typeof fetchMasterPendingAssignmentsCount === 'function') {
+            fetchMasterPendingAssignmentsCount();
+          }
+        }, 20000);
+      }
     }
 
     async function refreshStudentTierFromSupabase(force = false) {
@@ -2010,7 +2184,13 @@
         mainPortalDashboard.style.display = 'flex';
 
         loadStudentTradesFromSupabase(savedSession.id);
-        setupStudentRealtimeSync(savedSession.id);
+        if (typeof loadStudentAssignmentsFromSupabase === 'function') {
+          loadStudentAssignmentsFromSupabase(savedSession.id);
+        }
+        if (isMasterOrAdminAccount(savedSession) && typeof fetchMasterPendingAssignmentsCount === 'function') {
+          fetchMasterPendingAssignmentsCount();
+        }
+        setupStudentRealtimeSync(savedSession.id, savedSession);
         await refreshStudentTierFromSupabase(true);
       } else {
         cleanupStudentRealtimeSync();
@@ -2068,7 +2248,7 @@
 
         authErrorMsg.classList.add('hidden');
         updateStudentHeaderUI(sessionData);
-        setupStudentRealtimeSync(student.id);
+        setupStudentRealtimeSync(student.id, sessionData);
 
         const tierNotice = document.getElementById('vaultTierNotice');
         if (tierNotice) tierNotice.classList.add('hidden');
@@ -2076,6 +2256,12 @@
         currentPhase = 1;
         switchCurriculumPhase(1);
         await loadStudentTradesFromSupabase(student.id);
+        if (typeof loadStudentAssignmentsFromSupabase === 'function') {
+          await loadStudentAssignmentsFromSupabase(student.id);
+        }
+        if (isMasterOrAdminAccount(sessionData) && typeof fetchMasterPendingAssignmentsCount === 'function') {
+          fetchMasterPendingAssignmentsCount();
+        }
         playSuccessChime();
 
         authGateOverlay.classList.add('opacity-0', 'pointer-events-none');
@@ -2110,10 +2296,18 @@
     function handleLogout() {
       cleanupStudentRealtimeSync();
       closeAdminStudentsModal();
+      if (typeof closeAdminAssignmentsModal === 'function') closeAdminAssignmentsModal();
+      if (typeof closeChartLightbox === 'function') closeChartLightbox();
       const adminBtn = document.getElementById('btnAdminStudents');
       if (adminBtn) adminBtn.classList.add('hidden');
+      const adminAssignBtn = document.getElementById('btnAdminAssignments');
+      if (adminAssignBtn) adminAssignBtn.classList.add('hidden');
       const toastEl = document.getElementById('adminToastBanner');
       if (toastEl) toastEl.classList.add('hidden');
+      if (typeof studentAssignmentsById === 'object') {
+        Object.keys(studentAssignmentsById).forEach((k) => delete studentAssignmentsById[k]);
+      }
+      if (typeof setMasterPendingBadgeCount === 'function') setMasterPendingBadgeCount(0);
 
       localStorage.removeItem(AUTH_FLAG_KEY);
       localStorage.removeItem(STUDENT_SESSION_KEY);
@@ -2455,6 +2649,1211 @@
       }).join('');
 
       container.innerHTML = html;
+    }
+
+    /* -------------------------------------------------------------
+       PER-LESSON ASSIGNMENT & CHART SUBMISSION SYSTEM (SUPABASE)
+    -------------------------------------------------------------- */
+    const LESSON_ASSIGNMENT_CONFIGS = [
+      {
+        assignmentId: 'p1_01',
+        parentLessonId: 'p1_01',
+        title: 'Types of Trading',
+        phaseLabel: 'PHASE 1 · 01',
+        prompt: 'List and explain each type of trading (Scalping, Intraday, Swing, Position).',
+        fields: [
+          {
+            key: 'types_of_trading',
+            label: 'Explanation: Scalping, Intraday, Swing & Position Trading',
+            type: 'textarea',
+            rows: 6,
+            required: true,
+            placeholder: 'Break down Scalping, Intraday, Swing, and Position trading — include typical holding times, chart timeframes, and why our desk focuses on USTECH100 intraday execution...'
+          }
+        ]
+      },
+      {
+        assignmentId: 'p1_02',
+        parentLessonId: 'p1_02',
+        partLabel: 'Part 1: Objective & Identity',
+        title: 'Objective & Trader Identity',
+        phaseLabel: 'PHASE 1 · 02A',
+        prompt: 'Define your trading objective and trader identity, and explain what intraday trading is.',
+        fields: [
+          { key: 'objective_identity', label: '1. Objective & Trader Identity', type: 'textarea', rows: 4, required: true, placeholder: 'Define your clear trading objective, risk discipline, and identity as a rule-based trader...' },
+          { key: 'what_is_intraday', label: '2. What is Intraday?', type: 'textarea', rows: 4, required: true, placeholder: 'Explain what intraday trading is, session windows, and how entries/exits are managed within the same trading day...' }
+        ]
+      },
+      {
+        assignmentId: 'p1_02_chart',
+        parentLessonId: 'p1_02',
+        partLabel: 'Part 2: Chart an Intraday Trade',
+        title: 'Chart an Intraday Trade',
+        phaseLabel: 'PHASE 1 · 02B',
+        prompt: 'Upload a clean USTECH100 chart marking an intraday trade setup and explain why it qualifies.',
+        imageUpload: { enabled: true, required: true, maxImages: 1, label: 'USTECH100 Chart Screenshot Upload', dropLabel: 'Drop or Click to Upload USTECH100 Intraday Chart' },
+        fields: [
+          { key: 'intraday_explanation', label: 'Explanation: Why This Intraday Setup Qualifies', type: 'textarea', rows: 4, required: true, placeholder: 'Explain the marked intraday setup on USTECH100 (session window, structure, SL/TP placement, and why it qualifies)...' }
+        ]
+      },
+      {
+        assignmentId: 'p1_03',
+        parentLessonId: 'p1_03',
+        title: 'RJS Core System',
+        phaseLabel: 'PHASE 1 · 03',
+        prompt: 'Upload your chart showing a valid 15m candle body trendline breakout + pullback (confirming no bounce trades), and explain your trade setup.',
+        imageUpload: { enabled: true, required: true, maxImages: 1, label: 'Send Chart Here', dropLabel: 'Send Chart Here — 15m Candle Body Breakout + Pullback Screenshot' },
+        requiredCheckbox: { key: 'confirm_breakout_only', label: 'I confirm this entry is a 15m candle body breakout + pullback, NOT a trendline bounce.' },
+        fields: [
+          { key: 'rjs_explanation', label: 'Submit Explanation Here', type: 'textarea', rows: 5, required: true, placeholder: 'Explain the trendline draw, the full 15m candle body close outside the trendline, the pullback candle, RSI, and your SL/TP...' }
+        ]
+      },
+      {
+        assignmentId: 'p1_04',
+        parentLessonId: 'p1_04',
+        title: 'Forex Factory Update',
+        phaseLabel: 'PHASE 1 · 04',
+        prompt: 'Create your trading schedule for the week and explain every news/folder event that may affect each trading day.',
+        imageUpload: { enabled: true, required: false, maxImages: 1, label: 'Optional: Forex Factory Screenshot', dropLabel: 'Optional: Upload Your Weekly Forex Factory Calendar Screenshot' },
+        fields: [
+          { key: 'weekly_schedule', label: 'Weekly Schedule & News Breakdown (Monday – Friday)', type: 'textarea', rows: 6, required: true, placeholder: 'Monday: ...\nTuesday: ...\nWednesday: ...\nThursday: ...\nFriday: ...\nInclude USD red/orange folders, bank holidays, and whether each day is Tradable (1R), Risky (0.5R), or Stand Down...' }
+        ]
+      },
+      {
+        assignmentId: 'p1_05',
+        parentLessonId: 'p1_05',
+        partLabel: 'Part 1: Master Class (News)',
+        title: 'Master Class',
+        phaseLabel: 'PHASE 1 · 05A',
+        prompt: 'Explain Forex Factory / market conditions BEFORE, DURING, and AFTER high-impact news.',
+        fields: [
+          { key: 'before_news', label: 'Before News', type: 'textarea', rows: 3, required: true, placeholder: 'Describe liquidity, spread behavior, and our desk rules BEFORE high-impact USD news drops...' },
+          { key: 'during_news', label: 'During News', type: 'textarea', rows: 3, required: true, placeholder: 'Describe volatility spikes, whipsaws, spread widening, and why we stand down DURING the release...' },
+          { key: 'after_news', label: 'After News', type: 'textarea', rows: 3, required: true, placeholder: 'Describe the 30-minute post-news cooldown, structure stabilization, and when valid setups resume AFTER news...' }
+        ]
+      },
+      {
+        assignmentId: 'p1_05_fib',
+        parentLessonId: 'p1_05',
+        partLabel: 'Part 2: Power of Fibonacci',
+        title: 'Power of Fibonacci',
+        phaseLabel: 'PHASE 1 · 05B',
+        prompt: 'Upload your chart showing the Power of Fibonacci aligned with our structure and explain your levels.',
+        imageUpload: { enabled: true, required: true, maxImages: 1, label: 'Chart Screenshot Upload', dropLabel: 'Drop or Upload Chart Showing Fibonacci Alignment' },
+        fields: [
+          { key: 'fib_explanation', label: 'Fibonacci Structure & Levels Explanation', type: 'textarea', rows: 4, required: true, placeholder: 'Explain your anchor high/low, key Fibonacci retracement levels, confluence with the 15m breakout/pullback, and SL protection...' }
+        ]
+      },
+      {
+        assignmentId: 'p1_06',
+        parentLessonId: 'p1_06',
+        partLabel: 'Part 1: Psychology of TP',
+        title: 'Psychology of TP',
+        phaseLabel: 'PHASE 1 · 06A',
+        prompt: 'Explain: (1) What is TP 1st part? (2) What is TP 2nd part?',
+        fields: [
+          { key: 'tp_first_part', label: '1. What is TP 1st Part?', type: 'textarea', rows: 4, required: true, placeholder: 'Explain the first part of Take Profit psychology, securing partial/breakeven rules, and letting trades breathe...' },
+          { key: 'tp_second_part', label: '2. What is TP 2nd Part?', type: 'textarea', rows: 4, required: true, placeholder: 'Explain the second part of Take Profit psychology, holding to full target without greed or post-win overtrading...' }
+        ]
+      },
+      {
+        assignmentId: 'p1_06_vision',
+        parentLessonId: 'p1_06',
+        partLabel: 'Part 2: Personal TP Vision',
+        title: 'Personal TP Vision',
+        phaseLabel: 'PHASE 1 · 06B',
+        prompt: 'What does Take Profit (TP) look like for you?',
+        fields: [
+          { key: 'tp_vision', label: 'Your Personal Take Profit (TP) Vision', type: 'textarea', rows: 5, required: true, placeholder: 'Reflect on what achieving consistent Take Profit means for your trading journey, lifestyle, discipline, and long-term goals...' }
+        ]
+      },
+      {
+        assignmentId: 'p2_01',
+        parentLessonId: 'p2_01',
+        title: 'Phase 2 Kickoff & Readiness',
+        phaseLabel: 'PHASE 2 · 01',
+        prompt: 'Summarize your key Phase 1 mechanical takeaways and define your execution focus as you enter Phase 2.',
+        fields: [
+          { key: 'phase2_readiness', label: 'Phase 2 Readiness & Execution Focus', type: 'textarea', rows: 4, required: true, placeholder: 'Summarize your Phase 1 consistency habits and what you are locking in for Phase 2...' }
+        ]
+      },
+      {
+        assignmentId: 'p2_02',
+        parentLessonId: 'p2_02',
+        title: 'Protecting Your Trading Journey',
+        phaseLabel: 'PHASE 2 · 02',
+        prompt: 'Rate your Phase 1 and Phase 2 discipline/mindset (High or Low) and explain why.',
+        fields: [
+          { key: 'phase1_rating', label: 'Phase 1 Discipline / Mindset Rating', type: 'rating_high_low', required: true, options: [{ value: 'HIGH', title: 'HIGH' }, { value: 'LOW', title: 'LOW' }] },
+          { key: 'phase1_why', label: 'Phase 1 Why', type: 'textarea', rows: 3, required: true, placeholder: 'Explain why you rated your Phase 1 discipline/mindset High or Low...' },
+          { key: 'phase2_rating', label: 'Phase 2 Discipline / Mindset Rating', type: 'rating_high_low', required: true, options: [{ value: 'HIGH', title: 'HIGH' }, { value: 'LOW', title: 'LOW' }] },
+          { key: 'phase2_why', label: 'Phase 2 Why', type: 'textarea', rows: 3, required: true, placeholder: 'Explain why you rated your Phase 2 discipline/mindset High or Low...' }
+        ]
+      },
+      {
+        assignmentId: 'p2_03',
+        parentLessonId: 'p2_03',
+        title: 'Swing',
+        phaseLabel: 'PHASE 2 · 03',
+        prompt: 'On your USTECH100 chart, encircle a SCALP trade, an INTRADAY trade, and a SWING trade using different color-coded circles, and explain the difference in structure and hold time.',
+        imageUpload: { enabled: true, required: true, maxImages: 1, label: 'Color-Coded USTECH100 Chart Upload', dropLabel: 'Drop or Upload USTECH100 Chart with Scalp / Intraday / Swing Circles' },
+        fields: [
+          { key: 'color_coded_breakdown', label: 'Color-Coded Breakdown (Structure & Hold Time)', type: 'textarea', rows: 5, required: true, placeholder: 'Specify which circle color represents SCALP, INTRADAY, and SWING on your chart, and explain the difference in market structure and hold time...' }
+        ]
+      },
+      {
+        assignmentId: 'p2_04',
+        parentLessonId: 'p2_04',
+        title: 'RJS + Support and Resistance',
+        phaseLabel: 'PHASE 2 · 04',
+        prompt: 'Show your chart combining the RJS Core System with Support & Resistance levels and explain your setup.',
+        imageUpload: { enabled: true, required: true, maxImages: 1, label: 'Chart Screenshot Upload', dropLabel: 'Drop or Upload RJS + Support & Resistance Chart' },
+        fields: [
+          { key: 'rjs_sr_explanation', label: 'Setup Explanation (RJS + Support & Resistance)', type: 'textarea', rows: 4, required: true, placeholder: 'Explain how your Support & Resistance zones align with the 15m candle body trendline breakout and pullback...' }
+        ]
+      },
+      {
+        assignmentId: 'p2_05',
+        parentLessonId: 'p2_05',
+        title: 'Aiming a 1:4, 1:5',
+        phaseLabel: 'PHASE 2 · 05',
+        prompt: 'Find an intraday trade at 9:30 PM (NY Open) and evaluate if it can become a swing trade.',
+        imageUpload: { enabled: true, required: true, maxImages: 1, label: 'Chart Screenshot Upload', dropLabel: 'Drop Screenshot Here' },
+        fields: [
+          { key: 'reason_to_take_trade', label: 'Reason why you want to take this trade', type: 'textarea', rows: 3, required: true, placeholder: 'Explain the 9:30 PM NY Open setup confluence and why you want to enter this trade...' },
+          { key: 'starting_balance', label: 'Starting Balance', type: 'text', required: true, gridGroup: 'metrics4', placeholder: 'e.g. ₱10,000' },
+          { key: 'lot_size_used', label: 'Lot Size Used', type: 'text', required: true, gridGroup: 'metrics4', placeholder: 'e.g. 0.10' },
+          { key: 'tp_target', label: 'TP', type: 'text', required: true, gridGroup: 'metrics4', placeholder: 'e.g. 1:4 (+₱4,000)' },
+          { key: 'sl_level', label: 'SL', type: 'text', required: true, gridGroup: 'metrics4', placeholder: 'e.g. -1R (-₱1,000)' },
+          {
+            key: 'swing_option',
+            label: 'Scaling / Swing Conversion Option',
+            type: 'swing_option',
+            required: true,
+            options: [
+              { value: 'Option 1: Same SL, Higher TP', title: 'Option 1: Same SL, Higher TP', subtitle: 'Keep the intraday SL distance and extend TP to 1:4 / 1:5.' },
+              { value: 'Option 2: Tight SL, Different Lot Size & Same TP', title: 'Option 2: Tight SL, Different Lot Size & Same TP', subtitle: 'Tighten structural SL, adjust lot size for fixed risk, and keep target.' }
+            ]
+          },
+          { key: 'explain_why', label: 'Explain Why', type: 'textarea', rows: 4, required: true, placeholder: 'Explain why you chose Option 1 or Option 2 and whether this 9:30 PM setup can hold into a swing trade...' }
+        ]
+      },
+      {
+        assignmentId: 'p2_06',
+        parentLessonId: 'p2_06',
+        title: 'POI For A Swing',
+        phaseLabel: 'PHASE 2 · 06',
+        prompt: 'Show a Higher Time Frame (HTF) and Lower Time Frame (LTF) Support & Resistance chart and explain the Support & Resistance zones you identified.',
+        imageUpload: {
+          enabled: true,
+          required: true,
+          maxImages: 2,
+          label: 'HTF & LTF Chart Screenshots (Up to 2 Images)',
+          dropLabel: 'Upload HTF & LTF Chart Screenshots (Max 2 Images)',
+          slotLabels: ['Chart 1 · HTF Support & Resistance', 'Chart 2 · LTF Entry / Confirmation']
+        },
+        fields: [
+          { key: 'sr_identified', label: 'Explain the Support & Resistance identified', type: 'textarea', rows: 5, required: true, placeholder: 'Break down the Higher Time Frame (HTF) POI zone and how the Lower Time Frame (LTF) Support & Resistance confirms your swing entry...' }
+        ]
+      },
+      {
+        assignmentId: 'pa_01',
+        parentLessonId: 'pa_01',
+        title: 'Pro Archives · Tradable vs Not Tradable Tape Study',
+        phaseLabel: 'PRO ARCHIVES · 01',
+        prompt: 'Submit a USTECH100 chart screenshot comparing a tradable session vs. choppy/untradable session and explain your filter.',
+        imageUpload: { enabled: true, required: false, maxImages: 1, label: 'Optional Chart Screenshot', dropLabel: 'Upload Optional USTECH100 Tape Study Screenshot' },
+        fields: [{ key: 'tape_notes', label: 'Tape Study Breakdown', type: 'textarea', rows: 4, required: true, placeholder: 'Summarize the key structural differences between tradable and non-tradable tape conditions...' }]
+      },
+      {
+        assignmentId: 'pa_02',
+        parentLessonId: 'pa_02',
+        title: 'Pro Archives · Live Trade Review Breakdown',
+        phaseLabel: 'PRO ARCHIVES · 02',
+        prompt: 'Document your trade review findings and highlight one execution rule you will enforce next session.',
+        imageUpload: { enabled: true, required: false, maxImages: 1, label: 'Optional Chart Screenshot', dropLabel: 'Upload Optional Trade Review Screenshot' },
+        fields: [{ key: 'review_notes', label: 'Trade Review Notes', type: 'textarea', rows: 4, required: true, placeholder: 'Record your trade review observations and mechanical adjustments...' }]
+      },
+      {
+        assignmentId: 'pa_03',
+        parentLessonId: 'pa_03',
+        title: 'Pro Archives · Unstable Market Defense Notes',
+        phaseLabel: 'PRO ARCHIVES · 03',
+        prompt: 'Identify the warning signs of unstable/unpredictable market delivery and how you protect capital during chop.',
+        imageUpload: { enabled: true, required: false, maxImages: 1, label: 'Optional Chart Screenshot', dropLabel: 'Upload Optional Unstable Market Example' },
+        fields: [{ key: 'unstable_notes', label: 'Market Defense Breakdown', type: 'textarea', rows: 4, required: true, placeholder: 'Explain the price action cues that tell you to stand down...' }]
+      }
+    ];
+
+    let studentAssignmentsById = {};
+    let assignSelectedPartByLesson = {};
+    let assignFormDrafts = {};
+    let assignExistingUrlsById = {};
+    let assignPendingFilesById = {};
+    let assignEditingStateById = {};
+    let assignSubmittingId = null;
+
+    let adminAssignmentsList = [];
+    let adminAssignmentsLoading = false;
+    let adminAssignmentsError = null;
+    let adminAssignFilter = 'pending';
+    let adminAssignSearch = '';
+    let adminAssignFeedbackDrafts = {};
+    let adminAssignUpdatingId = null;
+
+    let lightboxUrls = [];
+    let lightboxIndex = 0;
+    let lightboxCaption = 'Chart Preview';
+
+    function isSafeImageUrl(url) {
+      try {
+        const u = new URL(String(url || '').trim());
+        return u.protocol === 'https:' || u.protocol === 'http:';
+      } catch {
+        return false;
+      }
+    }
+
+    function parseScreenshotUrls(raw) {
+      const s = String(raw || '').trim();
+      if (!s) return [];
+      if (s.startsWith('[')) {
+        try {
+          const arr = JSON.parse(s);
+          if (Array.isArray(arr)) return arr.map((x) => String(x || '').trim()).filter(isSafeImageUrl);
+        } catch {}
+      }
+      return s.split(',').map((p) => p.trim()).filter(isSafeImageUrl);
+    }
+
+    function serializeScreenshotUrls(urls) {
+      const clean = (urls || []).map((u) => String(u || '').trim()).filter(isSafeImageUrl);
+      if (clean.length === 0) return null;
+      if (clean.length === 1) return clean[0];
+      return JSON.stringify(clean);
+    }
+
+    function parseAssignmentAnswer(rawText) {
+      const text = String(rawText || '').trim();
+      if (!text) return { isStructured: false, fields: [], rawText: '' };
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && parsed.__format === 'rjs_assignment_v1' && Array.isArray(parsed.fields)) {
+          return {
+            isStructured: true,
+            fields: parsed.fields.map((f) => ({
+              key: String(f.key || ''),
+              label: String(f.label || f.key || 'Response'),
+              value: String(f.value || '')
+            })),
+            rawText: text
+          };
+        }
+      } catch {}
+      return { isStructured: false, fields: [{ key: 'response', label: 'Submitted Answer', value: text }], rawText: text };
+    }
+
+    function getAssignmentsForLesson(lessonId) {
+      const norm = normalizeLessonId(lessonId);
+      return LESSON_ASSIGNMENT_CONFIGS.filter((cfg) => normalizeLessonId(cfg.parentLessonId) === norm);
+    }
+
+    function getAssignmentMetaById(assignmentId) {
+      return LESSON_ASSIGNMENT_CONFIGS.find((cfg) => cfg.assignmentId === assignmentId);
+    }
+
+    function openChartLightbox(urls, index, caption) {
+      const safe = (urls || []).filter((u) => isSafeImageUrl(u) || String(u).startsWith('blob:'));
+      if (safe.length === 0) return;
+      lightboxUrls = safe;
+      lightboxIndex = Math.max(0, Math.min(index || 0, safe.length - 1));
+      lightboxCaption = caption || 'Chart Preview';
+      renderChartLightbox();
+      const modal = document.getElementById('chartLightboxModal');
+      if (modal) modal.classList.remove('hidden');
+      playTone(640, 'sine', 0.03);
+    }
+
+    function closeChartLightbox() {
+      const modal = document.getElementById('chartLightboxModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function stepChartLightbox(delta) {
+      if (lightboxUrls.length <= 1) return;
+      lightboxIndex = (lightboxIndex + delta + lightboxUrls.length) % lightboxUrls.length;
+      renderChartLightbox();
+    }
+
+    function renderChartLightbox() {
+      const img = document.getElementById('lightboxImageEl');
+      const cap = document.getElementById('lightboxCaptionText');
+      const prevBtn = document.getElementById('btnLightboxPrev');
+      const nextBtn = document.getElementById('btnLightboxNext');
+      if (img) img.src = lightboxUrls[lightboxIndex] || '';
+      if (cap) {
+        cap.textContent = lightboxUrls.length > 1
+          ? `${lightboxCaption} (${lightboxIndex + 1}/${lightboxUrls.length})`
+          : lightboxCaption;
+      }
+      if (prevBtn && nextBtn) {
+        if (lightboxUrls.length > 1) {
+          prevBtn.classList.remove('hidden');
+          nextBtn.classList.remove('hidden');
+        } else {
+          prevBtn.classList.add('hidden');
+          nextBtn.classList.add('hidden');
+        }
+      }
+    }
+
+    function setMasterPendingBadgeCount(count) {
+      const badge = document.getElementById('adminAssignmentsPendingBadge');
+      if (!badge) return;
+      const num = Number(count) || 0;
+      badge.textContent = String(num);
+      badge.className = num > 0
+        ? 'px-1.5 py-0.2 rounded text-[10px] font-mono font-bold num-mono bg-emerald-500 text-slate-950'
+        : 'px-1.5 py-0.2 rounded text-[10px] font-mono font-bold num-mono bg-[#0e131e] border border-hairline text-slate-300';
+    }
+
+    async function fetchMasterPendingAssignmentsCount() {
+      if (!supabaseClient || !isMasterOrAdminAccount(currentStudentSession)) return;
+      try {
+        const { count, error } = await supabaseClient
+          .from('lesson_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending');
+        if (!error && typeof count === 'number') {
+          setMasterPendingBadgeCount(count);
+        }
+      } catch (err) {
+        console.error('Pending count fetch error:', err);
+      }
+    }
+
+    async function loadStudentAssignmentsFromSupabase(studentId) {
+      if (!supabaseClient || !studentId) return;
+      try {
+        const { data, error } = await supabaseClient
+          .from('lesson_assignments')
+          .select('*')
+          .eq('student_id', studentId)
+          .order('created_at', { ascending: true });
+        if (!error && Array.isArray(data)) {
+          studentAssignmentsById = {};
+          data.forEach((row) => {
+            if (row.lesson_id) {
+              studentAssignmentsById[row.lesson_id] = row;
+              delete assignFormDrafts[row.lesson_id];
+              delete assignExistingUrlsById[row.lesson_id];
+            }
+          });
+          renderLessonAssignmentPanel();
+        }
+      } catch (err) {
+        console.error('Failed to load student assignments:', err);
+      }
+    }
+
+    function ensureAssignmentDraftInitialized(cfg, existingRecord) {
+      const aid = cfg.assignmentId;
+      if (!assignFormDrafts[aid]) {
+        const draft = {};
+        if (existingRecord) {
+          const parsed = parseAssignmentAnswer(existingRecord.answer_text);
+          cfg.fields.forEach((f) => {
+            const matched = parsed.fields.find((pf) => pf.key === f.key);
+            if (matched) draft[f.key] = matched.value;
+            else if (f.type === 'rating_high_low') draft[f.key] = 'HIGH';
+            else if (f.type === 'swing_option' && f.options?.[0]) draft[f.key] = f.options[0].value;
+            else draft[f.key] = '';
+          });
+          if (cfg.requiredCheckbox) {
+            const cb = parsed.fields.find((pf) => pf.key === cfg.requiredCheckbox.key);
+            draft.__checkbox = Boolean(cb && cb.value.startsWith('CONFIRMED:'));
+          }
+          assignExistingUrlsById[aid] = parseScreenshotUrls(existingRecord.screenshot_url);
+        } else {
+          cfg.fields.forEach((f) => {
+            if (f.type === 'rating_high_low') draft[f.key] = 'HIGH';
+            else if (f.type === 'swing_option' && f.options?.[0]) draft[f.key] = f.options[0].value;
+            else draft[f.key] = '';
+          });
+          draft.__checkbox = false;
+          assignExistingUrlsById[aid] = [];
+        }
+        assignFormDrafts[aid] = draft;
+      }
+      if (!assignPendingFilesById[aid]) assignPendingFilesById[aid] = [];
+      if (!assignExistingUrlsById[aid]) assignExistingUrlsById[aid] = existingRecord ? parseScreenshotUrls(existingRecord.screenshot_url) : [];
+    }
+
+    function setAssignmentFieldVal(aid, key, value) {
+      if (!assignFormDrafts[aid]) assignFormDrafts[aid] = {};
+      assignFormDrafts[aid][key] = value;
+    }
+
+    function selectAssignmentPartTab(lessonId, idx) {
+      assignSelectedPartByLesson[lessonId] = idx;
+      playTone(520, 'sine', 0.03);
+      renderLessonAssignmentPanel();
+    }
+
+    function setAssignmentEditMode(aid, isEditing) {
+      assignEditingStateById[aid] = isEditing;
+      renderLessonAssignmentPanel();
+    }
+
+    function handleAssignmentFilesSelected(aid, fileList, targetSlotIdx) {
+      const cfg = getAssignmentMetaById(aid);
+      if (!cfg || !fileList || fileList.length === 0) return;
+      const maxImages = cfg.imageUpload?.maxImages || 1;
+      const existing = assignExistingUrlsById[aid] || [];
+      const pending = assignPendingFilesById[aid] || [];
+
+      const valid = [];
+      for (const file of Array.from(fileList)) {
+        if (!file.type.startsWith('image/')) {
+          playErrorTone();
+          showAdminToast('error', 'Only image files (PNG, JPG, WEBP, GIF) are accepted.');
+          return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          playErrorTone();
+          showAdminToast('error', `Image "${file.name}" exceeds the 10MB limit.`);
+          return;
+        }
+        valid.push({ file, previewUrl: URL.createObjectURL(file) });
+      }
+
+      if (typeof targetSlotIdx === 'number' && maxImages === 2) {
+        if (targetSlotIdx < existing.length) {
+          existing.splice(targetSlotIdx, 1);
+          assignExistingUrlsById[aid] = existing;
+          pending.push(valid[0]);
+          assignPendingFilesById[aid] = pending.slice(0, maxImages - existing.length);
+        } else {
+          const pIdx = targetSlotIdx - existing.length;
+          if (pIdx < pending.length) {
+            try { URL.revokeObjectURL(pending[pIdx].previewUrl); } catch {}
+            pending[pIdx] = valid[0];
+          } else if (existing.length + pending.length < maxImages) {
+            pending.push(valid[0]);
+          }
+          assignPendingFilesById[aid] = pending.slice(0, Math.max(0, maxImages - existing.length));
+        }
+      } else if (maxImages === 1) {
+        pending.forEach((p) => { try { URL.revokeObjectURL(p.previewUrl); } catch {} });
+        assignExistingUrlsById[aid] = [];
+        assignPendingFilesById[aid] = [valid[0]];
+      } else {
+        const cap = Math.max(0, maxImages - existing.length - pending.length);
+        if (cap <= 0) {
+          playErrorTone();
+          showAdminToast('error', `Maximum of ${maxImages} chart screenshots allowed.`);
+          return;
+        }
+        assignPendingFilesById[aid] = [...pending, ...valid.slice(0, cap)];
+      }
+      playTone(620, 'sine', 0.04);
+      renderLessonAssignmentPanel();
+    }
+
+    function removeAssignmentExistingImage(aid, idx) {
+      const existing = assignExistingUrlsById[aid] || [];
+      existing.splice(idx, 1);
+      assignExistingUrlsById[aid] = existing;
+      playTone(440, 'sine', 0.03);
+      renderLessonAssignmentPanel();
+    }
+
+    function removeAssignmentPendingImage(aid, idx) {
+      const pending = assignPendingFilesById[aid] || [];
+      if (pending[idx]) {
+        try { URL.revokeObjectURL(pending[idx].previewUrl); } catch {}
+      }
+      pending.splice(idx, 1);
+      assignPendingFilesById[aid] = pending;
+      playTone(440, 'sine', 0.03);
+      renderLessonAssignmentPanel();
+    }
+
+    async function handleAssignmentSubmit(e, aid) {
+      e.preventDefault();
+      const cfg = getAssignmentMetaById(aid);
+      if (!cfg || assignSubmittingId) return;
+
+      if (!currentStudentSession?.id || !supabaseClient) {
+        playErrorTone();
+        showAdminToast('error', 'Please log in with your Desk Security Key before submitting.');
+        return;
+      }
+
+      const draft = assignFormDrafts[aid] || {};
+      for (const f of cfg.fields) {
+        if (f.required && !String(draft[f.key] || '').trim()) {
+          playErrorTone();
+          showAdminToast('error', `Please complete "${f.label}" before submitting.`);
+          return;
+        }
+      }
+
+      if (cfg.requiredCheckbox && !draft.__checkbox) {
+        playErrorTone();
+        showAdminToast('error', `Please check: "${cfg.requiredCheckbox.label}"`);
+        return;
+      }
+
+      const existingUrls = assignExistingUrlsById[aid] || [];
+      const pendingSlots = assignPendingFilesById[aid] || [];
+      if (cfg.imageUpload?.enabled && cfg.imageUpload.required && existingUrls.length + pendingSlots.length === 0) {
+        playErrorTone();
+        showAdminToast('error', `Please attach your chart screenshot (${cfg.imageUpload.label}).`);
+        return;
+      }
+
+      assignSubmittingId = aid;
+      renderLessonAssignmentPanel();
+
+      try {
+        const finalUrls = [...existingUrls];
+        for (let i = 0; i < pendingSlots.length; i++) {
+          const slot = pendingSlots[i];
+          const cleanName = slot.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const storagePath = `${currentStudentSession.id}/${aid}/${Date.now()}_${i}_${cleanName}`;
+          const { error: uploadErr } = await supabaseClient.storage
+            .from('assignments')
+            .upload(storagePath, slot.file, { cacheControl: '3600', upsert: false });
+          if (uploadErr) throw new Error(`Chart upload failed: ${uploadErr.message}`);
+          const { data: pubData } = supabaseClient.storage.from('assignments').getPublicUrl(storagePath);
+          if (pubData?.publicUrl) finalUrls.push(pubData.publicUrl);
+        }
+
+        const serializedFields = cfg.fields.map((f) => ({
+          key: f.key,
+          label: f.label,
+          value: String(draft[f.key] || '').trim()
+        }));
+        if (cfg.requiredCheckbox) {
+          serializedFields.push({
+            key: cfg.requiredCheckbox.key,
+            label: 'Confirmation Attestation',
+            value: draft.__checkbox ? `CONFIRMED: ${cfg.requiredCheckbox.label}` : 'NOT CONFIRMED'
+          });
+        }
+
+        const serializedAnswer = JSON.stringify({
+          __format: 'rjs_assignment_v1',
+          assignmentId: cfg.assignmentId,
+          title: cfg.title,
+          fields: serializedFields
+        });
+        const serializedScreenshots = serializeScreenshotUrls(finalUrls);
+        const existingRec = studentAssignmentsById[aid];
+        let savedRow = null;
+
+        if (existingRec?.id) {
+          const { data: updated, error: updErr } = await supabaseClient
+            .from('lesson_assignments')
+            .update({
+              student_name: currentStudentSession.full_name,
+              answer_text: serializedAnswer,
+              screenshot_url: serializedScreenshots,
+              status: 'pending',
+              mentor_feedback: null,
+              created_at: new Date().toISOString()
+            })
+            .eq('id', existingRec.id)
+            .select('*')
+            .maybeSingle();
+          if (!updErr && updated) savedRow = updated;
+        }
+
+        if (!savedRow) {
+          const { data: inserted, error: insErr } = await supabaseClient
+            .from('lesson_assignments')
+            .insert({
+              student_id: currentStudentSession.id,
+              student_name: currentStudentSession.full_name,
+              lesson_id: aid,
+              answer_text: serializedAnswer,
+              screenshot_url: serializedScreenshots,
+              status: 'pending',
+              mentor_feedback: null
+            })
+            .select('*')
+            .single();
+          if (insErr) throw new Error(insErr.message || 'Failed to save assignment submission.');
+          savedRow = inserted;
+        }
+
+        pendingSlots.forEach((s) => { try { URL.revokeObjectURL(s.previewUrl); } catch {} });
+        assignPendingFilesById[aid] = [];
+        assignExistingUrlsById[aid] = parseScreenshotUrls(savedRow.screenshot_url);
+        studentAssignmentsById[aid] = savedRow;
+        assignEditingStateById[aid] = false;
+
+        if (isMasterOrAdminAccount(currentStudentSession)) {
+          fetchMasterPendingAssignmentsCount();
+        }
+        playSuccessChime();
+        showAdminToast('success', `${cfg.title} submitted for mentor review.`);
+      } catch (err) {
+        console.error('Portal assignment submit error:', err);
+        playErrorTone();
+        showAdminToast('error', err?.message || 'Unable to submit assignment.');
+      } finally {
+        assignSubmittingId = null;
+        renderLessonAssignmentPanel();
+      }
+    }
+
+    function openSubmittedAssignmentLightbox(aid, idx) {
+      const rec = studentAssignmentsById[aid];
+      const cfg = getAssignmentMetaById(aid);
+      if (!rec) return;
+      const urls = parseScreenshotUrls(rec.screenshot_url);
+      openChartLightbox(urls, idx, `${cfg?.title || aid} — Chart ${idx + 1}`);
+    }
+
+    function openDraftAssignmentLightbox(aid, idx) {
+      const cfg = getAssignmentMetaById(aid);
+      const urls = [
+        ...(assignExistingUrlsById[aid] || []),
+        ...(assignPendingFilesById[aid] || []).map((p) => p.previewUrl)
+      ];
+      openChartLightbox(urls, idx, `${cfg?.title || aid} — Preview ${idx + 1}`);
+    }
+
+    function renderLessonAssignmentPanel() {
+      const card = document.getElementById('lessonAssignmentPanelCard');
+      if (!card || !activeLesson) return;
+
+      const configs = getAssignmentsForLesson(activeLesson.id);
+      if (configs.length === 0) {
+        card.classList.add('hidden');
+        return;
+      }
+      card.classList.remove('hidden');
+
+      const partIdx = Math.min(assignSelectedPartByLesson[activeLesson.id] || 0, configs.length - 1);
+      const cfg = configs[partIdx] || configs[0];
+      const aid = cfg.assignmentId;
+      const existingRec = studentAssignmentsById[aid];
+      ensureAssignmentDraftInitialized(cfg, existingRec);
+
+      const isTbdLocked = String(activeLesson.duration || '').toUpperCase() === 'TBD';
+      const isTierLocked = (activeLesson.phase === 2 && !hasPhase2Access(currentStudentSession)) || (activeLesson.phase === 3 && !hasProAccess(currentStudentSession));
+
+      const statusBadgeHtml = existingRec?.status === 'approved'
+        ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-mono text-[11px] font-bold">✓ APPROVED</span>`
+        : existingRec?.status === 'revision'
+        ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-400 font-mono text-[11px] font-bold">⚠ REVISION REQUESTED</span>`
+        : existingRec?.status === 'pending'
+        ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold">⏳ PENDING MENTOR REVIEW</span>`
+        : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-slate-400 font-mono text-[11px] font-bold">NOT SUBMITTED</span>`;
+
+      const partTabsHtml = configs.length > 1
+        ? `<div class="flex flex-wrap gap-2 p-1.5 rounded-xl bg-[#070a12] border border-hairline">
+            ${configs.map((c, idx) => {
+              const rec = studentAssignmentsById[c.assignmentId];
+              const dotClass = !rec ? 'bg-slate-600' : rec.status === 'approved' ? 'bg-emerald-400' : rec.status === 'revision' ? 'bg-rose-400' : 'bg-amber-400';
+              const activeCls = idx === partIdx ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400' : 'text-slate-400 hover:text-white border border-transparent';
+              return `<button type="button" onclick="selectAssignmentPartTab('${escapeQuizHtml(activeLesson.id)}', ${idx})" class="flex-1 min-w-[180px] px-3 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${activeCls}"><span class="w-2 h-2 rounded-full ${dotClass}"></span><span>${escapeQuizHtml(c.partLabel || c.title)}</span></button>`;
+            }).join('')}
+          </div>`
+        : '';
+
+      let bodyHtml = '';
+      if (isTierLocked || isTbdLocked) {
+        bodyHtml = `<div class="p-4 rounded-xl bg-[#070a12] border border-hairline flex items-center gap-3 text-xs font-mono text-slate-400"><span class="text-amber-400">🔒</span><span>${isTbdLocked ? 'This module is upcoming (TBD). Assignments will unlock once the lesson is released.' : 'Settle Phase 2 access to unlock and submit this assignment.'}</span></div>`;
+      } else {
+        const promptHtml = `<div class="p-3.5 rounded-xl bg-[#0a0d15] border border-hairline"><div class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold mb-1">ASSIGNMENT PROMPT</div><p class="text-xs sm:text-sm text-slate-200 leading-relaxed">${escapeQuizHtml(cfg.prompt)}</p></div>`;
+        const feedbackHtml = existingRec?.mentor_feedback
+          ? `<div class="p-3.5 rounded-xl border ${existingRec.status === 'revision' ? 'bg-rose-950/35 border-rose-500/45 text-rose-300' : 'bg-emerald-950/35 border-emerald-500/45 text-emerald-300'}"><div class="font-bold uppercase tracking-wider text-[11px] font-mono mb-1">MENTOR FEEDBACK // RYAN JADE (MASTER)</div><p class="text-xs font-mono leading-relaxed whitespace-pre-wrap">${escapeQuizHtml(existingRec.mentor_feedback)}</p></div>`
+          : '';
+
+        const showForm = !existingRec || existingRec.status === 'revision' || Boolean(assignEditingStateById[aid]);
+
+        if (existingRec && !showForm) {
+          const submittedUrls = parseScreenshotUrls(existingRec.screenshot_url);
+          const parsed = parseAssignmentAnswer(existingRec.answer_text);
+          const dateLabel = existingRec.created_at
+            ? new Date(existingRec.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : 'Just now';
+
+          const thumbsHtml = submittedUrls.length > 0
+            ? `<div class="space-y-2">
+                <div class="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">SUBMITTED CHART MARKUP${submittedUrls.length > 1 ? 'S' : ''} (CLICK TO ZOOM)</div>
+                <div class="grid gap-3 ${submittedUrls.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}">
+                  ${submittedUrls.map((u, idx) => `
+                    <button type="button" onclick="openSubmittedAssignmentLightbox('${escapeQuizHtml(aid)}', ${idx})" class="rounded-xl overflow-hidden border border-hairline bg-[#0a0d15] hover:border-emerald-500/60 transition-all text-left cursor-pointer">
+                      <img src="${escapeQuizHtml(u)}" alt="Submitted Chart ${idx + 1}" class="w-full max-h-64 object-contain bg-slate-950/60" />
+                      <div class="px-3 py-1.5 flex items-center justify-between text-[10px] font-mono text-slate-400 border-t border-hairline">
+                        <span>${escapeQuizHtml(cfg.imageUpload?.slotLabels?.[idx] || `Chart Screenshot ${idx + 1}`)}</span>
+                        <span class="text-emerald-400 font-bold">ZOOM</span>
+                      </div>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>`
+            : '';
+
+          const fieldsReadOnlyHtml = parsed.fields.map((pf) => `
+            <div class="p-3 rounded-lg bg-[#0a0d15] border border-hairline">
+              <div class="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold mb-1">${escapeQuizHtml(pf.label)}</div>
+              <div class="text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed">${escapeQuizHtml(pf.value || '—')}</div>
+            </div>
+          `).join('');
+
+          bodyHtml = `${promptHtml}${feedbackHtml}
+            <div class="space-y-4 p-4 rounded-xl bg-[#070a12] border border-hairline">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-hairline">
+                <span class="text-[11px] font-mono text-slate-400">Submitted: <strong class="text-white">${escapeQuizHtml(dateLabel)}</strong></span>
+                ${existingRec.status === 'pending' ? `<button type="button" onclick="setAssignmentEditMode('${escapeQuizHtml(aid)}', true)" class="px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline hover:border-slate-500 text-slate-300 hover:text-white font-mono text-[11px] font-semibold cursor-pointer">Edit Submission</button>` : ''}
+              </div>
+              ${thumbsHtml}
+              <div class="space-y-2.5">${fieldsReadOnlyHtml}</div>
+            </div>
+          `;
+        } else {
+          const draft = assignFormDrafts[aid] || {};
+          const existingUrls = assignExistingUrlsById[aid] || [];
+          const pendingSlots = assignPendingFilesById[aid] || [];
+          const combined = [
+            ...existingUrls.map((url, idx) => ({ kind: 'existing', url, idx, name: 'Attached Chart Screenshot' })),
+            ...pendingSlots.map((p, idx) => ({ kind: 'pending', url: p.previewUrl, idx, name: p.file.name }))
+          ];
+
+          let uploaderHtml = '';
+          if (cfg.imageUpload?.enabled) {
+            const maxImg = cfg.imageUpload.maxImages || 1;
+            if (maxImg === 2) {
+              uploaderHtml = `
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <label class="text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">${escapeQuizHtml(cfg.imageUpload.label)} ${cfg.imageUpload.required ? '<span class="text-rose-400">*</span>' : ''}</label>
+                    <span class="text-[10px] font-mono text-slate-400">${combined.length}/2 images · PNG/JPG/WEBP</span>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    ${[0, 1].map((slotIdx) => {
+                      const item = combined[slotIdx];
+                      const slotTitle = cfg.imageUpload.slotLabels?.[slotIdx] || `Chart ${slotIdx + 1}`;
+                      return `
+                        <div class="rounded-xl border border-hairline bg-[#070a12] p-3 space-y-2">
+                          <div class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">${escapeQuizHtml(slotTitle)}</div>
+                          <input id="assignFileSlot_${escapeQuizHtml(aid)}_${slotIdx}" type="file" accept="image/*" class="hidden" onchange="handleAssignmentFilesSelected('${escapeQuizHtml(aid)}', this.files, ${slotIdx}); this.value='';" />
+                          ${item ? `
+                            <div class="rounded-lg overflow-hidden border border-hairline bg-slate-950/60">
+                              <img src="${escapeQuizHtml(item.url)}" alt="${escapeQuizHtml(slotTitle)}" onclick="openDraftAssignmentLightbox('${escapeQuizHtml(aid)}', ${slotIdx})" class="w-full h-40 object-contain cursor-pointer" />
+                              <div class="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-[#0a0d15] border-t border-hairline">
+                                <button type="button" onclick="document.getElementById('assignFileSlot_${escapeQuizHtml(aid)}_${slotIdx}').click()" class="text-[10px] font-mono text-emerald-400 hover:underline cursor-pointer">Replace</button>
+                                <button type="button" onclick="${item.kind === 'existing' ? `removeAssignmentExistingImage('${escapeQuizHtml(aid)}', ${item.idx})` : `removeAssignmentPendingImage('${escapeQuizHtml(aid)}', ${item.idx})`}" class="text-[10px] font-mono text-rose-400 hover:text-rose-300 cursor-pointer">Remove</button>
+                              </div>
+                            </div>
+                          ` : `
+                            <button type="button" onclick="document.getElementById('assignFileSlot_${escapeQuizHtml(aid)}_${slotIdx}').click()" class="w-full h-36 rounded-lg border border-dashed border-slate-600 hover:border-emerald-500/70 bg-[#0a0d15] flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer px-3 text-center">
+                              <span class="text-[11px] font-mono font-semibold">Click to Upload ${slotIdx === 0 ? 'HTF' : 'LTF'} Chart</span>
+                            </button>
+                          `}
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `;
+            } else {
+              uploaderHtml = `
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <label class="text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">${escapeQuizHtml(cfg.imageUpload.label)} ${cfg.imageUpload.required ? '<span class="text-rose-400">*</span>' : ''}</label>
+                    <span class="text-[10px] font-mono text-slate-400">${combined.length}/1 image · PNG/JPG/WEBP</span>
+                  </div>
+                  <input id="assignFileSingle_${escapeQuizHtml(aid)}" type="file" accept="image/*" class="hidden" onchange="handleAssignmentFilesSelected('${escapeQuizHtml(aid)}', this.files); this.value='';" />
+                  ${combined.length > 0 ? `
+                    <div class="rounded-xl border border-hairline bg-[#070a12] overflow-hidden">
+                      <img src="${escapeQuizHtml(combined[0].url)}" alt="Chart Preview" onclick="openDraftAssignmentLightbox('${escapeQuizHtml(aid)}', 0)" class="w-full max-h-64 object-contain bg-slate-950/60 cursor-pointer" />
+                      <div class="flex items-center justify-between px-3 py-2 border-t border-hairline bg-[#0a0d15] text-[11px] font-mono">
+                        <span class="text-slate-400 truncate max-w-[60%]">${escapeQuizHtml(combined[0].name)}</span>
+                        <div class="flex items-center gap-3">
+                          <button type="button" onclick="document.getElementById('assignFileSingle_${escapeQuizHtml(aid)}').click()" class="text-emerald-400 hover:underline font-semibold cursor-pointer">Replace Chart</button>
+                          <button type="button" onclick="${combined[0].kind === 'existing' ? `removeAssignmentExistingImage('${escapeQuizHtml(aid)}', ${combined[0].idx})` : `removeAssignmentPendingImage('${escapeQuizHtml(aid)}', ${combined[0].idx})`}" class="text-rose-400 hover:text-rose-300 cursor-pointer">Remove</button>
+                        </div>
+                      </div>
+                    </div>
+                  ` : `
+                    <div onclick="document.getElementById('assignFileSingle_${escapeQuizHtml(aid)}').click()" ondragover="event.preventDefault()" ondrop="event.preventDefault(); if (event.dataTransfer.files) handleAssignmentFilesSelected('${escapeQuizHtml(aid)}', event.dataTransfer.files)" class="rounded-xl border-2 border-dashed border-slate-700 hover:border-emerald-500/70 bg-[#070a12] p-6 flex flex-col items-center justify-center gap-2 text-center text-slate-400 hover:text-emerald-400 transition-all cursor-pointer">
+                      <div class="text-xs font-mono font-bold">${escapeQuizHtml(cfg.imageUpload.dropLabel)}</div>
+                      <div class="text-[10px] font-mono text-slate-500">Drag &amp; drop screenshot here, or click to browse files</div>
+                    </div>
+                  `}
+                </div>
+              `;
+            }
+          }
+
+          let fieldsHtml = '';
+          for (let i = 0; i < cfg.fields.length; i++) {
+            const f = cfg.fields[i];
+            if (f.gridGroup === 'metrics4') {
+              const group = [f];
+              while (i + 1 < cfg.fields.length && cfg.fields[i + 1].gridGroup === 'metrics4') {
+                i++;
+                group.push(cfg.fields[i]);
+              }
+              fieldsHtml += `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                ${group.map((gf) => `
+                  <div class="space-y-1.5">
+                    <label class="block text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">${escapeQuizHtml(gf.label)} ${gf.required ? '<span class="text-rose-400">*</span>' : ''}</label>
+                    <input type="text" value="${escapeQuizHtml(draft[gf.key] || '')}" oninput="setAssignmentFieldVal('${escapeQuizHtml(aid)}', '${escapeQuizHtml(gf.key)}', this.value)" placeholder="${escapeQuizHtml(gf.placeholder || '')}" class="w-full bg-[#070a12] border border-hairline rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 num-mono" />
+                  </div>
+                `).join('')}
+              </div>`;
+              continue;
+            }
+            if (f.type === 'rating_high_low') {
+              const currVal = draft[f.key] || 'HIGH';
+              fieldsHtml += `<div class="space-y-1.5">
+                <label class="block text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">${escapeQuizHtml(f.label)} ${f.required ? '<span class="text-rose-400">*</span>' : ''}</label>
+                <div class="grid grid-cols-2 gap-2">
+                  ${(f.options || []).map((opt) => {
+                    const sel = currVal === opt.value;
+                    const cls = sel
+                      ? opt.value === 'HIGH' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-rose-500/20 border-rose-500 text-rose-400'
+                      : 'bg-[#070a12] border-hairline text-slate-400 hover:text-white';
+                    return `<button type="button" onclick="setAssignmentFieldVal('${escapeQuizHtml(aid)}', '${escapeQuizHtml(f.key)}', '${escapeQuizHtml(opt.value)}'); playTone(540, 'sine', 0.03); renderLessonAssignmentPanel();" class="py-2 px-3 rounded-lg border font-mono text-xs font-bold transition-all cursor-pointer ${cls}">${escapeQuizHtml(opt.title)}</button>`;
+                  }).join('')}
+                </div>
+              </div>`;
+              continue;
+            }
+            if (f.type === 'swing_option') {
+              const currVal = draft[f.key] || (f.options?.[0]?.value || '');
+              fieldsHtml += `<div class="space-y-2">
+                <label class="block text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">${escapeQuizHtml(f.label)} ${f.required ? '<span class="text-rose-400">*</span>' : ''}</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  ${(f.options || []).map((opt) => {
+                    const sel = currVal === opt.value;
+                    const cardCls = sel ? 'bg-emerald-500/15 border-emerald-500/60' : 'bg-[#070a12] border-hairline hover:border-slate-600';
+                    return `<button type="button" onclick="setAssignmentFieldVal('${escapeQuizHtml(aid)}', '${escapeQuizHtml(f.key)}', '${escapeQuizHtml(opt.value)}'); playTone(560, 'sine', 0.03); renderLessonAssignmentPanel();" class="p-3 rounded-xl border text-left transition-all cursor-pointer ${cardCls}">
+                      <div class="flex items-center gap-2">
+                        <span class="w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${sel ? 'border-emerald-400' : 'border-slate-500'}">${sel ? '<span class="w-2 h-2 rounded-full bg-emerald-400"></span>' : ''}</span>
+                        <span class="text-xs font-mono font-bold ${sel ? 'text-emerald-400' : 'text-white'}">${escapeQuizHtml(opt.title)}</span>
+                      </div>
+                      ${opt.subtitle ? `<p class="text-[11px] text-slate-400 mt-1.5 pl-5 leading-snug">${escapeQuizHtml(opt.subtitle)}</p>` : ''}
+                    </button>`;
+                  }).join('')}
+                </div>
+              </div>`;
+              continue;
+            }
+            fieldsHtml += `<div class="space-y-1.5">
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">${escapeQuizHtml(f.label)} ${f.required ? '<span class="text-rose-400">*</span>' : ''}</label>
+              <textarea rows="${f.rows || 4}" oninput="setAssignmentFieldVal('${escapeQuizHtml(aid)}', '${escapeQuizHtml(f.key)}', this.value)" placeholder="${escapeQuizHtml(f.placeholder || '')}" class="w-full bg-[#070a12] border border-hairline rounded-xl px-3.5 py-2.5 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 leading-relaxed">${escapeQuizHtml(draft[f.key] || '')}</textarea>
+            </div>`;
+          }
+
+          const checkboxHtml = cfg.requiredCheckbox
+            ? `<label class="flex items-start gap-2.5 p-3 rounded-xl bg-[#070a12] border border-amber-500/35 hover:border-amber-500/60 cursor-pointer select-none">
+                <input type="checkbox" ${draft.__checkbox ? 'checked' : ''} onchange="setAssignmentFieldVal('${escapeQuizHtml(aid)}', '__checkbox', this.checked)" class="mt-0.5 rounded bg-slate-900 border-slate-600 text-emerald-500 focus:ring-0 w-4 h-4 cursor-pointer shrink-0" />
+                <span class="text-xs font-mono text-amber-300 leading-snug">${escapeQuizHtml(cfg.requiredCheckbox.label)}</span>
+              </label>`
+            : '';
+
+          const isSub = assignSubmittingId === aid;
+          const btnLabel = isSub ? 'UPLOADING & SUBMITTING...' : existingRec?.status === 'revision' ? 'RESUBMIT ASSIGNMENT' : existingRec ? 'UPDATE SUBMISSION' : 'SUBMIT ASSIGNMENT';
+
+          bodyHtml = `${promptHtml}${feedbackHtml}
+            <form onsubmit="handleAssignmentSubmit(event, '${escapeQuizHtml(aid)}')" class="space-y-4">
+              ${uploaderHtml}
+              <div class="space-y-4">${fieldsHtml}</div>
+              ${checkboxHtml}
+              <div class="flex flex-wrap items-center justify-end gap-2.5 pt-2">
+                ${existingRec && existingRec.status === 'pending' && assignEditingStateById[aid] ? `<button type="button" onclick="setAssignmentEditMode('${escapeQuizHtml(aid)}', false)" class="px-4 py-2 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 hover:text-white font-mono text-xs font-semibold cursor-pointer">Cancel Edit</button>` : ''}
+                <button type="submit" ${isSub ? 'disabled' : ''} class="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold font-mono text-xs tracking-wider transition-all cursor-pointer disabled:opacity-60">${btnLabel}</button>
+              </div>
+            </form>
+          `;
+        }
+      }
+
+      card.innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-hairline">
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h4 class="text-xs sm:text-sm font-bold text-white uppercase tracking-wider font-mono">LESSON ASSIGNMENT &amp; CHART SUBMISSION</h4>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-[#0e131e] border border-hairline text-slate-400">${escapeQuizHtml(cfg.phaseLabel)}</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">${escapeQuizHtml(cfg.title)}</p>
+          </div>
+          <div class="shrink-0">${statusBadgeHtml}</div>
+        </div>
+        ${partTabsHtml}
+        ${bodyHtml}
+      `;
+    }
+
+    /* -------------------------------------------------------------
+       ADMIN-ONLY ASSIGNMENT REVIEW QUEUE (MASTER ACCOUNT ONLY)
+    -------------------------------------------------------------- */
+    function openAdminAssignmentsModal() {
+      if (!isMasterOrAdminAccount(currentStudentSession)) return;
+      const modal = document.getElementById('adminAssignmentsModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      playTone(620, 'sine', 0.04);
+      fetchAdminAssignmentsQueue();
+    }
+
+    function closeAdminAssignmentsModal() {
+      const modal = document.getElementById('adminAssignmentsModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function setAdminAssignFilter(filterVal) {
+      adminAssignFilter = filterVal;
+      renderAdminAssignmentsQueue();
+    }
+
+    function setAdminAssignSearch(val) {
+      adminAssignSearch = String(val || '');
+      renderAdminAssignmentsQueue();
+    }
+
+    function setAdminFeedbackDraft(recordId, val) {
+      adminAssignFeedbackDrafts[recordId] = val;
+    }
+
+    function openAdminAssignmentLightbox(recordId, idx) {
+      const rec = adminAssignmentsList.find((a) => a.id === recordId);
+      if (!rec) return;
+      const meta = getAssignmentMetaById(rec.lesson_id);
+      const urls = parseScreenshotUrls(rec.screenshot_url);
+      openChartLightbox(urls, idx, `${rec.student_name} — ${meta?.title || rec.lesson_id} (Chart ${idx + 1})`);
+    }
+
+    async function fetchAdminAssignmentsQueue() {
+      if (!supabaseClient || !isMasterOrAdminAccount(currentStudentSession)) return;
+      adminAssignmentsLoading = true;
+      adminAssignmentsError = null;
+      const icon = document.getElementById('adminAssignmentsRefreshIcon');
+      if (icon) icon.classList.add('animate-spin');
+      renderAdminAssignmentsQueue();
+
+      try {
+        const { data, error } = await supabaseClient
+          .from('lesson_assignments')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        adminAssignmentsList = data || [];
+        adminAssignmentsList.forEach((item) => {
+          if (adminAssignFeedbackDrafts[item.id] === undefined) {
+            adminAssignFeedbackDrafts[item.id] = item.mentor_feedback || '';
+          }
+        });
+        setMasterPendingBadgeCount(adminAssignmentsList.filter((a) => a.status === 'pending').length);
+      } catch (err) {
+        console.error('Admin assignments fetch error:', err);
+        adminAssignmentsError = err?.message || 'Unable to load student assignment submissions.';
+      } finally {
+        adminAssignmentsLoading = false;
+        if (icon) icon.classList.remove('animate-spin');
+        renderAdminAssignmentsQueue();
+      }
+    }
+
+    async function submitAdminAssignmentDecision(recordId, nextStatus) {
+      if (!supabaseClient || !isMasterOrAdminAccount(currentStudentSession) || adminAssignUpdatingId) return;
+      const rec = adminAssignmentsList.find((a) => a.id === recordId);
+      if (!rec) return;
+
+      const feedback = String(adminAssignFeedbackDrafts[recordId] || '').trim();
+      if (nextStatus === 'revision' && !feedback) {
+        playErrorTone();
+        showAdminToast('error', 'Please enter brief Mentor Feedback explaining what to revise.');
+        return;
+      }
+
+      adminAssignUpdatingId = recordId;
+      playTone(620, 'sine', 0.04);
+      renderAdminAssignmentsQueue();
+
+      try {
+        const { data: updated, error } = await supabaseClient
+          .from('lesson_assignments')
+          .update({
+            status: nextStatus,
+            mentor_feedback: feedback || null
+          })
+          .eq('id', recordId)
+          .select('*')
+          .maybeSingle();
+
+        if (error) throw error;
+
+        adminAssignmentsList = adminAssignmentsList.map((item) =>
+          item.id === recordId
+            ? { ...item, status: updated?.status || nextStatus, mentor_feedback: updated?.mentor_feedback ?? (feedback || null) }
+            : item
+        );
+        setMasterPendingBadgeCount(adminAssignmentsList.filter((a) => a.status === 'pending').length);
+
+        const meta = getAssignmentMetaById(rec.lesson_id);
+        playSuccessChime();
+        showAdminToast(
+          'success',
+          nextStatus === 'approved'
+            ? `Approved ${rec.student_name}'s submission for ${meta?.title || rec.lesson_id}.`
+            : `Requested revision from ${rec.student_name} for ${meta?.title || rec.lesson_id}.`
+        );
+      } catch (err) {
+        console.error('Admin review decision error:', err);
+        playErrorTone();
+        showAdminToast('error', `Failed to update assignment: ${err?.message || 'Database error'}`);
+      } finally {
+        adminAssignUpdatingId = null;
+        renderAdminAssignmentsQueue();
+      }
+    }
+
+    function renderAdminAssignmentsQueue() {
+      const body = document.getElementById('adminAssignmentsQueueBody');
+      if (!body) return;
+
+      const pendingCnt = adminAssignmentsList.filter((a) => a.status === 'pending').length;
+      const approvedCnt = adminAssignmentsList.filter((a) => a.status === 'approved').length;
+      const revisionCnt = adminAssignmentsList.filter((a) => a.status === 'revision').length;
+
+      const tabPending = document.getElementById('adminAssignTab-pending');
+      const tabApproved = document.getElementById('adminAssignTab-approved');
+      const tabAll = document.getElementById('adminAssignTab-all');
+      const revPill = document.getElementById('adminAssignRevisionPill');
+
+      if (tabPending) {
+        tabPending.textContent = `Pending (${pendingCnt})`;
+        tabPending.className = `flex-1 px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${adminAssignFilter === 'pending' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/35' : 'text-slate-400 hover:text-white border border-transparent'}`;
+      }
+      if (tabApproved) {
+        tabApproved.textContent = `Approved (${approvedCnt})`;
+        tabApproved.className = `flex-1 px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${adminAssignFilter === 'approved' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/35' : 'text-slate-400 hover:text-white border border-transparent'}`;
+      }
+      if (tabAll) {
+        tabAll.textContent = `All (${adminAssignmentsList.length})`;
+        tabAll.className = `flex-1 px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${adminAssignFilter === 'all' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/35' : 'text-slate-400 hover:text-white border border-transparent'}`;
+      }
+      if (revPill) {
+        if (revisionCnt > 0) {
+          revPill.textContent = `Revision: ${revisionCnt}`;
+          revPill.classList.remove('hidden');
+        } else {
+          revPill.classList.add('hidden');
+        }
+      }
+
+      const q = adminAssignSearch.trim().toLowerCase();
+      const filtered = adminAssignmentsList.filter((item) => {
+        if (adminAssignFilter === 'pending' && item.status !== 'pending') return false;
+        if (adminAssignFilter === 'approved' && item.status !== 'approved') return false;
+        if (!q) return true;
+        const meta = getAssignmentMetaById(item.lesson_id);
+        const titleStr = `${meta?.title || ''} ${meta?.phaseLabel || ''} ${item.lesson_id}`.toLowerCase();
+        return String(item.student_name || '').toLowerCase().includes(q) || titleStr.includes(q);
+      });
+
+      let html = '';
+      if (adminAssignmentsError) {
+        html += `<div class="p-3 rounded-lg bg-rose-950/35 border border-rose-500/40 text-rose-300 text-xs font-mono">${escapeQuizHtml(adminAssignmentsError)}</div>`;
+      }
+      if (adminAssignmentsLoading && adminAssignmentsList.length === 0) {
+        html += `<div class="py-12 text-center text-slate-400 font-mono text-xs">Loading student assignment submissions...</div>`;
+        body.innerHTML = html;
+        return;
+      }
+      if (filtered.length === 0) {
+        html += `<div class="py-12 text-center text-slate-400 font-mono text-xs border border-hairline rounded-xl bg-[#070a12]">No submissions found in this filter.</div>`;
+        body.innerHTML = html;
+        return;
+      }
+
+      html += filtered.map((item) => {
+        const meta = getAssignmentMetaById(item.lesson_id);
+        const lessonTitle = meta ? meta.title : item.lesson_id;
+        const phaseTag = meta ? meta.phaseLabel : 'LESSON';
+        const urls = parseScreenshotUrls(item.screenshot_url);
+        const parsed = parseAssignmentAnswer(item.answer_text);
+        const isBusy = adminAssignUpdatingId === item.id;
+        const tsLabel = item.created_at
+          ? new Date(item.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : 'Recent';
+
+        const statusBadge = item.status === 'approved'
+          ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-mono text-[11px] font-bold">✓ APPROVED</span>`
+          : item.status === 'revision'
+          ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-400 font-mono text-[11px] font-bold">⚠ REVISION REQUESTED</span>`
+          : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold">⏳ PENDING REVIEW</span>`;
+
+        const thumbsCol = urls.length > 0
+          ? `<div class="lg:col-span-5 space-y-2">
+              <div class="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">CHART MARKUP${urls.length > 1 ? 'S' : ''} (CLICK TO ZOOM)</div>
+              <div class="grid gap-2.5 ${urls.length > 1 ? 'grid-cols-2 lg:grid-cols-1' : 'grid-cols-1'}">
+                ${urls.map((u, idx) => `
+                  <button type="button" onclick="openAdminAssignmentLightbox('${escapeQuizHtml(item.id)}', ${idx})" class="rounded-xl overflow-hidden border border-hairline bg-[#0a0d15] hover:border-emerald-500/60 transition-all text-left cursor-pointer">
+                    <img src="${escapeQuizHtml(u)}" alt="Chart ${idx + 1}" class="w-full h-44 object-contain bg-slate-950/70" />
+                    <div class="px-2.5 py-1.5 flex items-center justify-between text-[10px] font-mono text-slate-400 border-t border-hairline">
+                      <span>${escapeQuizHtml(meta?.imageUpload?.slotLabels?.[idx] || `Chart ${idx + 1}`)}</span>
+                      <span class="text-emerald-400 font-bold">LIGHTBOX ZOOM</span>
+                    </div>
+                  </button>
+                `).join('')}
+              </div>
+            </div>`
+          : '';
+
+        const answersCol = `<div class="${urls.length > 0 ? 'lg:col-span-7' : ''} space-y-2.5">
+          ${parsed.fields.map((pf) => `
+            <div class="p-3 rounded-lg bg-[#0a0d15] border border-hairline">
+              <div class="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold mb-1">${escapeQuizHtml(pf.label)}</div>
+              <div class="text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed">${escapeQuizHtml(pf.value || '—')}</div>
+            </div>
+          `).join('')}
+        </div>`;
+
+        return `
+          <div class="p-4 sm:p-5 rounded-xl bg-[#070a12] border border-hairline space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-hairline">
+              <div class="space-y-1">
+                <div class="flex items-center flex-wrap gap-2">
+                  <span class="text-sm font-bold text-white">${escapeQuizHtml(item.student_name)}</span>
+                  <span class="px-2 py-0.5 rounded bg-[#0e131e] border border-hairline text-emerald-400 font-mono text-[10px] font-bold">${escapeQuizHtml(phaseTag)}</span>
+                  <span class="text-xs font-mono font-semibold text-slate-300">${escapeQuizHtml(lessonTitle)}</span>
+                </div>
+                <div class="text-[11px] font-mono text-slate-400">Submitted: ${escapeQuizHtml(tsLabel)}</div>
+              </div>
+              <div class="shrink-0">${statusBadge}</div>
+            </div>
+
+            <div class="grid gap-4 ${urls.length > 0 ? 'grid-cols-1 lg:grid-cols-12' : 'grid-cols-1'}">
+              ${thumbsCol}
+              ${answersCol}
+            </div>
+
+            <div class="pt-3 border-t border-hairline space-y-3">
+              <div class="space-y-1.5">
+                <label class="block text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">Mentor Feedback</label>
+                <textarea rows="2" oninput="setAdminFeedbackDraft('${escapeQuizHtml(item.id)}', this.value)" placeholder="Write optional praise or specific chart/rule corrections for the student..." class="w-full bg-[#0a0d15] border border-hairline rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-amber-500">${escapeQuizHtml(adminAssignFeedbackDrafts[item.id] ?? '')}</textarea>
+              </div>
+              <div class="flex flex-wrap items-center justify-end gap-2.5">
+                <button type="button" ${isBusy ? 'disabled' : ''} onclick="submitAdminAssignmentDecision('${escapeQuizHtml(item.id)}', 'revision')" class="px-4 py-2 rounded-lg bg-rose-950/40 border border-rose-500/50 text-rose-300 hover:bg-rose-600 hover:text-white font-mono text-xs font-bold transition-all cursor-pointer disabled:opacity-50">REQUEST REVISION</button>
+                <button type="button" ${isBusy ? 'disabled' : ''} onclick="submitAdminAssignmentDecision('${escapeQuizHtml(item.id)}', 'approved')" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-mono text-xs font-bold transition-all cursor-pointer disabled:opacity-50">APPROVE ASSIGNMENT</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      body.innerHTML = html;
     }
 
     document.getElementById('btnSoundToggle').addEventListener('click', () => {
@@ -3839,6 +5238,9 @@
       }
 
       renderCurriculumList();
+      if (typeof renderLessonAssignmentPanel === 'function') {
+        renderLessonAssignmentPanel();
+      }
     }
 
     async function validateLessonKeyword() {
@@ -7430,6 +8832,7 @@
       renderCalendar();
       renderCurriculumList();
       selectLesson(CURRICULUM_DATA.phase1[0]);
+      if (typeof renderLessonAssignmentPanel === 'function') renderLessonAssignmentPanel();
       updateKeywordsCounter();
       renderAuditTable();
       updateAuditStats();

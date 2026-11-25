@@ -29,14 +29,18 @@ import {
   Moon,
   ClipboardCheck,
   CandlestickChart,
-  Users
+  Users,
+  ClipboardList,
+  X
 } from 'lucide-react';
 import { Chart as ChartJS, registerables } from 'chart.js';
-import { supabase, StudentSession } from './lib/supabase';
+import { supabase, StudentSession, LessonAssignmentRecord } from './lib/supabase';
 import { QuizzesTab } from './components/QuizzesTab';
 import { SimulatorTab } from './components/SimulatorTab';
 import { TraderProgressRail } from './components/TraderProgressRail';
 import { AdminStudentManagerModal } from './components/AdminStudentManagerModal';
+import { LessonAssignmentPanel } from './components/LessonAssignmentPanel';
+import { AdminAssignmentsModal } from './components/AdminAssignmentsModal';
 import {
   DEFAULT_TIER_STATS,
   SimulatorDifficulty,
@@ -846,6 +850,10 @@ export default function App() {
   const [tierRestrictedNotice, setTierRestrictedNotice] = useState<string | null>(null);
   const [worksheetModalOpen, setWorksheetModalOpen] = useState<boolean>(false);
   const [adminModalOpen, setAdminModalOpen] = useState<boolean>(false);
+  const [adminAssignmentsModalOpen, setAdminAssignmentsModalOpen] = useState<boolean>(false);
+  const [pendingAssignmentsCount, setPendingAssignmentsCount] = useState<number>(0);
+  const [studentAssignmentsById, setStudentAssignmentsById] = useState<Record<string, LessonAssignmentRecord>>({});
+  const [lightboxState, setLightboxState] = useState<{ urls: string[]; index: number; caption: string } | null>(null);
   const [adminToast, setAdminToast] = useState<{ id: number; type: 'success' | 'error'; message: string } | null>(null);
   const adminToastTimerRef = useRef<number | null>(null);
 
@@ -857,6 +865,12 @@ export default function App() {
     adminToastTimerRef.current = window.setTimeout(() => {
       setAdminToast(null);
     }, 3800);
+  };
+
+  const openChartLightbox = (urls: string[], index: number, caption: string) => {
+    if (!urls || urls.length === 0) return;
+    setLightboxState({ urls, index: Math.max(0, Math.min(index, urls.length - 1)), caption });
+    playTone(640, 'sine', 0.03);
   };
 
   // Quizzes Tab Progress (Per-Student LocalStorage + Supabase Cloud Sync)
@@ -1278,6 +1292,114 @@ export default function App() {
     };
   }, [currentStudent?.id, isAuthenticated]);
 
+  // Load & subscribe to logged-in student's lesson_assignments (instant mentor feedback/approval sync)
+  useEffect(() => {
+    const sid = currentStudent?.id;
+    if (!sid || !isAuthenticated) {
+      setStudentAssignmentsById({});
+      return;
+    }
+
+    const fetchStudentAssignments = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('lesson_assignments')
+          .select('*')
+          .eq('student_id', sid)
+          .order('created_at', { ascending: true });
+
+        if (!error && Array.isArray(data)) {
+          const map: Record<string, LessonAssignmentRecord> = {};
+          (data as LessonAssignmentRecord[]).forEach((row) => {
+            if (row.lesson_id) map[row.lesson_id] = row;
+          });
+          setStudentAssignmentsById(map);
+        }
+      } catch (err) {
+        console.error('Failed to load student assignments:', err);
+      }
+    };
+
+    fetchStudentAssignments();
+
+    const channel = supabase
+      .channel(`student-assignments-sync-${sid}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lesson_assignments',
+          filter: `student_id=eq.${sid}`
+        },
+        (payload) => {
+          const rec = (payload?.new || null) as LessonAssignmentRecord | null;
+          if (rec && rec.lesson_id) {
+            setStudentAssignmentsById((prev) => ({
+              ...prev,
+              [rec.lesson_id]: rec
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentStudent?.id, isAuthenticated]);
+
+  // Master Admin ONLY: Live pending submissions badge counter across all students
+  useEffect(() => {
+    if (!isMasterAccount || !isAuthenticated) {
+      setPendingAssignmentsCount(0);
+      return;
+    }
+
+    const fetchPendingCount = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('lesson_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending');
+
+        if (!error && typeof count === 'number') {
+          setPendingAssignmentsCount(count);
+        }
+      } catch (err) {
+        console.error('Pending assignments count fetch error:', err);
+      }
+    };
+
+    fetchPendingCount();
+
+    const channel = supabase
+      .channel('master-pending-assignments-count')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lesson_assignments'
+        },
+        () => {
+          fetchPendingCount();
+        }
+      )
+      .subscribe();
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') {
+        fetchPendingCount();
+      }
+    }, 20000);
+
+    return () => {
+      window.clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [isMasterAccount, isAuthenticated]);
+
   // Immediately clear restrictions and activate Phase 2 lessons when student tier unlocks Phase 2
   useEffect(() => {
     if (isPhase2Unlocked) {
@@ -1485,6 +1607,10 @@ export default function App() {
     setAuthError(false);
     setTierRestrictedNotice(null);
     setAdminModalOpen(false);
+    setAdminAssignmentsModalOpen(false);
+    setPendingAssignmentsCount(0);
+    setStudentAssignmentsById({});
+    setLightboxState(null);
     setAdminToast(null);
     playTone(400, 'sine', 0.08);
   };
@@ -2318,7 +2444,7 @@ export default function App() {
   -------------------------------------------------------------- */
   if (!isAuthenticated) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#07090e]">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#090D16]">
         <div className={`glass-card max-w-md w-full rounded-2xl p-6 sm:p-8 border border-emerald-500/30 shadow-[0_0_80px_rgba(16,185,129,0.14)] ${isShaking ? 'shake-error' : ''}`}>
           
           <div className="flex items-center justify-between pb-4 border-b border-hairline mb-6">
@@ -2461,20 +2587,44 @@ export default function App() {
               </div>
             </div>
 
-            {/* Admin-Only Student Access Manager Button (Strictly Ryan Jade MASTER) */}
+            {/* Admin-Only Student Access Manager & Assignment Review Buttons (Strictly Ryan Jade MASTER) */}
             {isMasterAccount && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminModalOpen(true);
-                  playTone(620, 'sine', 0.04);
-                }}
-                className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:text-white hover:bg-amber-500/25 hover:border-amber-400 font-mono text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
-                title="Master Admin: Manage Student Phase 1 / Phase 2 Access"
-              >
-                <Users className="w-3.5 h-3.5 text-amber-400" />
-                <span>ADMIN: STUDENTS</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminModalOpen(true);
+                    playTone(620, 'sine', 0.04);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:text-white hover:bg-amber-500/25 hover:border-amber-400 font-mono text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Master Admin: Manage Student Phase 1 / Phase 2 Access"
+                >
+                  <Users className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ADMIN: STUDENTS</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminAssignmentsModalOpen(true);
+                    playTone(620, 'sine', 0.04);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:text-white hover:bg-amber-500/25 hover:border-amber-400 font-mono text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Master Admin: Review Student Assignments & Chart Markups"
+                >
+                  <ClipboardList className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ADMIN: ASSIGNMENTS</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold num-mono ${
+                      pendingAssignmentsCount > 0
+                        ? 'bg-emerald-500 text-slate-950'
+                        : 'bg-[#0e131e] border border-hairline text-slate-300'
+                    }`}
+                  >
+                    {pendingAssignmentsCount}
+                  </span>
+                </button>
+              </>
             )}
 
             {/* Sleek LOG OUT Button in Top Nav */}
@@ -3577,6 +3727,32 @@ export default function App() {
                 </div>
 
               </div>
+
+              {/* Per-Lesson Assignment & Chart Markup Submission Panel */}
+              <LessonAssignmentPanel
+                activeLessonId={activeLesson.id}
+                activeLessonDuration={activeLesson.duration}
+                isTierLocked={
+                  (activeLesson.phase === 2 && !isPhase2Unlocked) ||
+                  (activeLesson.phase === 3 && !isProUnlocked)
+                }
+                currentStudent={currentStudent}
+                submissionsByAssignmentId={studentAssignmentsById}
+                onSubmissionSaved={(record) => {
+                  setStudentAssignmentsById((prev) => ({
+                    ...prev,
+                    [record.lesson_id]: record
+                  }));
+                  if (isMasterAccount) {
+                    setPendingAssignmentsCount((c) => c + 1);
+                  }
+                }}
+                onToast={showAdminToast}
+                onPlaySuccess={playSuccessChime}
+                onPlayError={playErrorTone}
+                onPlayTone={playTone}
+                onOpenLightbox={openChartLightbox}
+              />
             </div>
 
           </div>
@@ -4409,11 +4585,102 @@ export default function App() {
         />
       )}
 
+      {/* ADMIN-ONLY: ASSIGNMENT REVIEW QUEUE MODAL (STRICTLY MASTER ACCOUNT) */}
+      {isMasterAccount && (
+        <AdminAssignmentsModal
+          isOpen={adminAssignmentsModalOpen}
+          onClose={() => setAdminAssignmentsModalOpen(false)}
+          onPendingCountChange={setPendingAssignmentsCount}
+          onToast={showAdminToast}
+          onPlaySuccess={playSuccessChime}
+          onPlayError={playErrorTone}
+          onPlayTone={playTone}
+          onOpenLightbox={openChartLightbox}
+        />
+      )}
+
+      {/* FULL-SCREEN CHART SCREENSHOT LIGHTBOX ZOOM */}
+      {lightboxState && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLightboxState(null);
+          }}
+        >
+          <div className="max-w-6xl w-full flex flex-col gap-3 max-h-[94vh]">
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-[#0e131e] border border-hairline">
+              <div className="text-xs font-mono font-bold text-white truncate">
+                {lightboxState.caption}
+                {lightboxState.urls.length > 1 && (
+                  <span className="ml-2 text-emerald-400">
+                    ({lightboxState.index + 1}/{lightboxState.urls.length})
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {lightboxState.urls.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLightboxState((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                index: (prev.index - 1 + prev.urls.length) % prev.urls.length
+                              }
+                            : null
+                        )
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-[#070a12] border border-hairline text-slate-300 hover:text-white font-mono text-xs cursor-pointer"
+                    >
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLightboxState((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                index: (prev.index + 1) % prev.urls.length
+                              }
+                            : null
+                        )
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-[#070a12] border border-hairline text-slate-300 hover:text-white font-mono text-xs cursor-pointer"
+                    >
+                      Next
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setLightboxState(null)}
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/60 cursor-pointer"
+                  aria-label="Close Lightbox"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0 flex items-center justify-center rounded-2xl overflow-hidden border border-hairline bg-slate-950 p-2">
+              <img
+                src={lightboxState.urls[lightboxState.index]}
+                alt={lightboxState.caption}
+                className="max-w-full max-h-[82vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* INSTANT TOAST CONFIRMATION */}
       {adminToast && (
         <div
           key={adminToast.id}
-          className={`fixed bottom-5 right-5 z-[60] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all ${
+          className={`fixed bottom-5 right-5 z-[80] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all ${
             adminToast.type === 'success'
               ? 'border-emerald-500/60 text-emerald-300'
               : 'border-rose-500/60 text-rose-300'

@@ -32,3 +32,18 @@ export interface SupabaseTradeLog {
   net_pnl: number;
   notes?: string | null;
 }
+
+export type LessonAssignmentStatus = 'pending' | 'approved' | 'revision';
+
+export interface LessonAssignmentRecord {
+  id: string;
+  created_at?: string;
+  student_id: string;
+  student_name: string;
+  lesson_id: string;
+  answer_text: string;
+  screenshot_url?: string | null;
+  status: LessonAssignmentStatus;
+  mentor_feedback?: string | null;
+}
+
