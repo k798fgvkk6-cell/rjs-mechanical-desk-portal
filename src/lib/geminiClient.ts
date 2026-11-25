@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-export const GEMINI_MODEL = 'gemini-3.8-flash';
+export const GEMINI_MODEL = 'gemini-3.8-flash-lite';
 export const FALLBACK_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 export const GEMINI_KEY_STORAGE = 'rjs_gemini_api_key';
 
