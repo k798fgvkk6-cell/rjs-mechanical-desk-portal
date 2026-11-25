@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 export const GEMINI_MODEL = 'gemini-3.8-flash';
+export const FALLBACK_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 export const GEMINI_KEY_STORAGE = 'rjs_gemini_api_key';
 
 export interface TradeReviewInputRow {
@@ -134,6 +135,71 @@ export function isGeminiKeyRejectedError(err: unknown): boolean {
   );
 }
 
+function isOverloadedOrBusyError(err: unknown): boolean {
+  const e = err as { status?: unknown; message?: unknown };
+  const status = Number(e?.status || 0);
+  const msg = String(e?.message || '').toLowerCase();
+  return (
+    status === 503 ||
+    status === 429 ||
+    msg.includes('503') ||
+    msg.includes('429') ||
+    msg.includes('service unavailable') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('overloaded') ||
+    msg.includes('high demand') ||
+    msg.includes('busy') ||
+    msg.includes('rate limit')
+  );
+}
+
+async function callGeminiWithRetryAndFallback<T>(
+  action: (modelToUse: string) => Promise<T>
+): Promise<T> {
+  const maxAttempts = 3;
+  const delayMs = 1500;
+
+  let lastError: unknown = null;
+
+  // Try primary model (gemini-3.8-flash) up to 3 times on 503 / high demand
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await action(GEMINI_MODEL);
+    } catch (err: unknown) {
+      lastError = err;
+      if (isGeminiKeyRejectedError(err)) {
+        throw err;
+      }
+      if (isOverloadedOrBusyError(err) && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      if (!isOverloadedOrBusyError(err)) {
+        // If it's a non-overload error (e.g. invalid request), break out to try fallback or throw
+        break;
+      }
+    }
+  }
+
+  // If primary model failed after retries due to overload, try fallback model (gemini-3.1-flash-lite) once
+  try {
+    return await action(FALLBACK_GEMINI_MODEL);
+  } catch (fallbackErr: unknown) {
+    if (isGeminiKeyRejectedError(fallbackErr)) {
+      throw fallbackErr;
+    }
+    // Return friendly message instead of raw JSON
+    if (isOverloadedOrBusyError(fallbackErr) || isOverloadedOrBusyError(lastError)) {
+      throw new Error('AI Desk is briefly busy—retrying...');
+    }
+    const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      throw new Error('Network connection error. Please check your internet and try again.');
+    }
+    throw new Error(msg || 'Unable to reach AI Desk right now. Please try again in a moment.');
+  }
+}
+
 export async function runBrowserAiTradeReview(params: {
   periodLabel: string;
   startingBalance: number;
@@ -224,75 +290,77 @@ Trade Rows (up to most recent 150 in period):
 ${JSON.stringify(compactRows)}`;
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt,
-      config: {
-        systemInstruction: TRADE_REVIEW_SYSTEM_INSTRUCTION,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            disciplineScore: {
-              type: Type.INTEGER,
-              description: 'Overall rule adherence and execution discipline score from 0 to 100.'
+    return await callGeminiWithRetryAndFallback(async (modelToUse) => {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: modelToUse,
+        contents: prompt,
+        config: {
+          systemInstruction: TRADE_REVIEW_SYSTEM_INSTRUCTION,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              disciplineScore: {
+                type: Type.INTEGER,
+                description: 'Overall rule adherence and execution discipline score from 0 to 100.'
+              },
+              scoreLabel: {
+                type: Type.STRING,
+                description: 'Short 2-3 word uppercase verdict such as TIGHT EXECUTION, DRIFT WARNING, or TILT RISK.'
+              },
+              topStrength: {
+                type: Type.STRING,
+                description: 'Concise 1-2 sentence breakdown of what is working best in their execution.'
+              },
+              primaryLeak: {
+                type: Type.STRING,
+                description: 'Concise 1-2 sentence leak or tilt warning identifying recurring execution or risk issues.'
+              },
+              actionPlan: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: 'Exactly 3 specific, actionable rules for their next trading week.'
+              },
+              summaryNote: {
+                type: Type.STRING,
+                description: 'Brief 1-sentence executive coaching takeaway referencing their period stats.'
+              }
             },
-            scoreLabel: {
-              type: Type.STRING,
-              description: 'Short 2-3 word uppercase verdict such as TIGHT EXECUTION, DRIFT WARNING, or TILT RISK.'
-            },
-            topStrength: {
-              type: Type.STRING,
-              description: 'Concise 1-2 sentence breakdown of what is working best in their execution.'
-            },
-            primaryLeak: {
-              type: Type.STRING,
-              description: 'Concise 1-2 sentence leak or tilt warning identifying recurring execution or risk issues.'
-            },
-            actionPlan: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: 'Exactly 3 specific, actionable rules for their next trading week.'
-            },
-            summaryNote: {
-              type: Type.STRING,
-              description: 'Brief 1-sentence executive coaching takeaway referencing their period stats.'
-            }
-          },
-          required: ['disciplineScore', 'scoreLabel', 'topStrength', 'primaryLeak', 'actionPlan', 'summaryNote']
+            required: ['disciplineScore', 'scoreLabel', 'topStrength', 'primaryLeak', 'actionPlan', 'summaryNote']
+          }
         }
-      }
+      });
+
+      const parsed = JSON.parse((response.text || '{}').trim()) as {
+        disciplineScore?: number;
+        scoreLabel?: string;
+        topStrength?: string;
+        primaryLeak?: string;
+        actionPlan?: string[];
+        summaryNote?: string;
+      };
+
+      return {
+        disciplineScore: Math.min(100, Math.max(0, Math.round(Number(parsed.disciplineScore) || 0))),
+        scoreLabel: String(parsed.scoreLabel || 'DESK AUDIT').trim(),
+        topStrength: String(parsed.topStrength || '').trim(),
+        primaryLeak: String(parsed.primaryLeak || '').trim(),
+        actionPlan: Array.isArray(parsed.actionPlan)
+          ? parsed.actionPlan.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 3)
+          : [],
+        summaryNote: String(parsed.summaryNote || '').trim(),
+        periodLabel: params.periodLabel,
+        tradeCount: trades.length
+      };
     });
-
-    const parsed = JSON.parse((response.text || '{}').trim()) as {
-      disciplineScore?: number;
-      scoreLabel?: string;
-      topStrength?: string;
-      primaryLeak?: string;
-      actionPlan?: string[];
-      summaryNote?: string;
-    };
-
-    return {
-      disciplineScore: Math.min(100, Math.max(0, Math.round(Number(parsed.disciplineScore) || 0))),
-      scoreLabel: String(parsed.scoreLabel || 'DESK AUDIT').trim(),
-      topStrength: String(parsed.topStrength || '').trim(),
-      primaryLeak: String(parsed.primaryLeak || '').trim(),
-      actionPlan: Array.isArray(parsed.actionPlan)
-        ? parsed.actionPlan.map((s) => String(s || '').trim()).filter(Boolean).slice(0, 3)
-        : [],
-      summaryNote: String(parsed.summaryNote || '').trim(),
-      periodLabel: params.periodLabel,
-      tradeCount: trades.length
-    };
   } catch (err: unknown) {
     if (isGeminiKeyRejectedError(err) && !getBuiltInGeminiApiKey()) {
       throw new GeminiKeyRequiredError(
         'The saved Gemini API key was rejected. Enter a valid Gemini API key below.'
       );
     }
-    const msg = err instanceof Error ? err.message : 'Unable to generate AI Desk Performance Review.';
+    const msg = err instanceof Error ? err.message : 'AI Desk is briefly busy—retrying...';
     throw new Error(msg);
   }
 }
@@ -318,27 +386,29 @@ export async function runBrowserDeskAiChat(messages: DeskChatMessage[]): Promise
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: sanitized,
-      config: {
-        systemInstruction: DESK_CHAT_SYSTEM_INSTRUCTION
-      }
-    });
+    return await callGeminiWithRetryAndFallback(async (modelToUse) => {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: modelToUse,
+        contents: sanitized,
+        config: {
+          systemInstruction: DESK_CHAT_SYSTEM_INSTRUCTION
+        }
+      });
 
-    const reply = (response.text || '').trim();
-    if (!reply) {
-      throw new Error('RJS Desk AI returned an empty response. Please try asking again.');
-    }
-    return reply;
+      const reply = (response.text || '').trim();
+      if (!reply) {
+        throw new Error('RJS Desk AI returned an empty response. Please try asking again.');
+      }
+      return reply;
+    });
   } catch (err: unknown) {
     if (isGeminiKeyRejectedError(err) && !getBuiltInGeminiApiKey()) {
       throw new GeminiKeyRequiredError(
-        'The saved Gemini API key was rejected. Enter a valid Gemini API key above.'
+        'The saved Gemini API key was rejected. Enter a valid Gemini API key below.'
       );
     }
-    const msg = err instanceof Error ? err.message : 'Unable to reach RJS Desk AI right now.';
+    const msg = err instanceof Error ? err.message : 'AI Desk is briefly busy—retrying...';
     throw new Error(msg);
   }
 }
