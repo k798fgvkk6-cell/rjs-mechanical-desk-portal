@@ -5151,7 +5151,11 @@ export default function App() {
       )}
 
       {/* FLOATING ASK RJS DESK AI MENTOR */}
-      <AskDeskAiWidget onPlayTone={playTone} />
+      <AskDeskAiWidget
+        onPlayTone={playTone}
+        currentPhase={activeStudentPhase}
+        isAdmin={isMasterOrAdminAccount(currentStudent) || hasPhase2Access(currentStudent)}
+      />
 
       {/* INSTANT TOAST CONFIRMATION */}
       {adminToast && (

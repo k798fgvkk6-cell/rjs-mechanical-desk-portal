@@ -161,7 +161,6 @@ async function callGeminiWithRetryAndFallback<T>(
 
   let lastError: unknown = null;
 
-  // Try primary model (gemini-3.8-flash) up to 3 times on 503 / high demand
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await action(GEMINI_MODEL);
@@ -175,20 +174,17 @@ async function callGeminiWithRetryAndFallback<T>(
         continue;
       }
       if (!isOverloadedOrBusyError(err)) {
-        // If it's a non-overload error (e.g. invalid request), break out to try fallback or throw
         break;
       }
     }
   }
 
-  // If primary model failed after retries due to overload, try fallback model (gemini-3.1-flash-lite) once
   try {
     return await action(FALLBACK_GEMINI_MODEL);
   } catch (fallbackErr: unknown) {
     if (isGeminiKeyRejectedError(fallbackErr)) {
       throw fallbackErr;
     }
-    // Return friendly message instead of raw JSON
     if (isOverloadedOrBusyError(fallbackErr) || isOverloadedOrBusyError(lastError)) {
       throw new Error('AI Desk is briefly busy—retrying...');
     }
@@ -365,7 +361,10 @@ ${JSON.stringify(compactRows)}`;
   }
 }
 
-export async function runBrowserDeskAiChat(messages: DeskChatMessage[]): Promise<string> {
+export async function runBrowserDeskAiChat(
+  messages: DeskChatMessage[],
+  studentContext?: { phase: 1 | 2; isAdmin: boolean }
+): Promise<string> {
   const apiKey = resolveGeminiApiKey();
   if (!apiKey) {
     throw new GeminiKeyRequiredError(
@@ -385,6 +384,11 @@ export async function runBrowserDeskAiChat(messages: DeskChatMessage[]): Promise
     throw new Error('Please enter a question for RJS Desk AI.');
   }
 
+  let systemInstruction = DESK_CHAT_SYSTEM_INSTRUCTION;
+  if (studentContext && studentContext.phase === 1 && !studentContext.isAdmin) {
+    systemInstruction += `\n\nCRITICAL STUDENT PHASE 1 LOCK: The currently logged-in trader is in Phase 1 and has NOT yet unlocked or settled Phase 2. If they ask about Phase 2 rules, swing scaling (Option 1 / Option 2 1:4/1:5 targets), Phase 2 ₱20,000 profit goals, or advanced Phase 2 setups, do NOT reveal Phase 2 details. Politely inform them that Phase 2 protocols are locked until they complete Phase 1, and encourage them to focus entirely on their current Phase 1 checklist (₱10,000 profit goal, 1R standard risk, and 15m breakout + pullback rules).`;
+  }
+
   try {
     return await callGeminiWithRetryAndFallback(async (modelToUse) => {
       const ai = new GoogleGenAI({ apiKey });
@@ -392,7 +396,7 @@ export async function runBrowserDeskAiChat(messages: DeskChatMessage[]): Promise
         model: modelToUse,
         contents: sanitized,
         config: {
-          systemInstruction: DESK_CHAT_SYSTEM_INSTRUCTION
+          systemInstruction
         }
       });
 

@@ -26,6 +26,8 @@ interface ChatMessage {
 
 interface AskDeskAiWidgetProps {
   onPlayTone?: (freq?: number, type?: OscillatorType, duration?: number) => void;
+  currentPhase?: 1 | 2;
+  isAdmin?: boolean;
 }
 
 const QUICK_PROMPTS = [
@@ -35,7 +37,11 @@ const QUICK_PROMPTS = [
   'Why no trendline bounces?'
 ];
 
-export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) => {
+export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({
+  onPlayTone,
+  currentPhase = 1,
+  isAdmin = false
+}) => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
@@ -101,7 +107,8 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
 
     try {
       const reply = await runBrowserDeskAiChat(
-        nextHistory.map((m) => ({ role: m.role, text: m.text }))
+        nextHistory.map((m) => ({ role: m.role, text: m.text })),
+        { phase: currentPhase, isAdmin }
       );
 
       const modelMsg: ChatMessage = {
