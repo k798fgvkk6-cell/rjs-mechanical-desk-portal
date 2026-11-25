@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Sparkles,
   CheckCircle2,
@@ -7,8 +7,14 @@ import {
   RefreshCw,
   X,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  KeyRound
 } from 'lucide-react';
+import {
+  getBuiltInGeminiApiKey,
+  getSavedGeminiApiKey,
+  saveGeminiApiKey
+} from '../lib/geminiClient';
 
 export interface AiTradeReviewResult {
   disciplineScore: number;
@@ -25,8 +31,10 @@ interface AiTradeReviewCardProps {
   review: AiTradeReviewResult | null;
   isLoading: boolean;
   error: string | null;
+  needsApiKey?: boolean;
   periodLabel: string;
   onRefresh: () => void;
+  onApiKeySaved?: () => void;
   onDismiss: () => void;
 }
 
@@ -34,11 +42,27 @@ export const AiTradeReviewCard: React.FC<AiTradeReviewCardProps> = ({
   review,
   isLoading,
   error,
+  needsApiKey = false,
   periodLabel,
   onRefresh,
+  onApiKeySaved,
   onDismiss
 }) => {
-  if (!isLoading && !error && !review) return null;
+  const [showKeyForm, setShowKeyForm] = useState<boolean>(false);
+  const [keyInput, setKeyInput] = useState<string>(() => getSavedGeminiApiKey());
+
+  const hasBuiltInKey = Boolean(getBuiltInGeminiApiKey());
+  const showingKeyEditor = needsApiKey || showKeyForm;
+
+  if (!isLoading && !error && !review && !showingKeyEditor) return null;
+
+  const handleSaveKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = saveGeminiApiKey(keyInput);
+    if (!cleaned) return;
+    setShowKeyForm(false);
+    onApiKeySaved?.();
+  };
 
   const score = review?.disciplineScore ?? 0;
   const scoreTone =
@@ -78,12 +102,23 @@ export const AiTradeReviewCard: React.FC<AiTradeReviewCardProps> = ({
               </span>
             </div>
             <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-              RJS Mechanical USTECH100 Risk &amp; Tilt Audit
+              RJS Mechanical USTECH100 Risk &amp; Tilt Audit · Gemini 2.5 Flash
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5">
+          {!hasBuiltInKey && (
+            <button
+              type="button"
+              onClick={() => setShowKeyForm((prev) => !prev)}
+              className="px-2.5 py-1.5 rounded-lg bg-[#0e131e] border border-hairline hover:border-amber-500/40 text-slate-300 hover:text-white font-mono text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Set Gemini API Key"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+              <span>API Key</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onRefresh}
@@ -96,7 +131,10 @@ export const AiTradeReviewCard: React.FC<AiTradeReviewCardProps> = ({
           </button>
           <button
             type="button"
-            onClick={onDismiss}
+            onClick={() => {
+              setShowKeyForm(false);
+              onDismiss();
+            }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors cursor-pointer"
             aria-label="Close AI Desk Performance Review"
           >
@@ -118,8 +156,54 @@ export const AiTradeReviewCard: React.FC<AiTradeReviewCardProps> = ({
         </div>
       )}
 
-      {/* Error State */}
-      {!isLoading && error && (
+      {/* Inline API Key Input Box when missing/rejected/toggled */}
+      {!isLoading && showingKeyEditor && (
+        <form
+          onSubmit={handleSaveKey}
+          className="p-4 rounded-xl bg-[#070a12] border border-amber-500/35 space-y-3"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 shrink-0" />
+                <span>Enter Gemini API Key</span>
+              </div>
+              <p className="text-[11px] font-mono text-slate-400 mt-1">
+                {error ||
+                  'No built-in Gemini API key found on this static host. Paste your Gemini API key below to save it locally in your browser (rjs_gemini_api_key).'}
+              </p>
+            </div>
+            {showKeyForm && !needsApiKey && (
+              <button
+                type="button"
+                onClick={() => setShowKeyForm(false)}
+                className="text-[10px] font-mono text-slate-400 hover:text-white cursor-pointer shrink-0"
+              >
+                Hide
+              </button>
+            )}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="password"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              placeholder="AIza..."
+              className="flex-1 bg-[#0a0d15] border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+            <button
+              type="submit"
+              disabled={!keyInput.trim()}
+              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-mono text-xs font-bold transition-colors cursor-pointer disabled:cursor-not-allowed"
+            >
+              Save Key &amp; Analyze
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Error State (when not prompting for API key) */}
+      {!isLoading && error && !showingKeyEditor && (
         <div className="p-3.5 rounded-xl bg-rose-950/35 border border-rose-500/40 flex items-start gap-2.5 text-xs font-mono text-rose-300">
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
           <div>

@@ -45,7 +45,11 @@ import {
   decodeTradePhaseAndNote,
   isPhase2SwingWin
 } from './lib/supabase';
-import { runServerAiTradeReview } from './lib/geminiClient';
+import {
+  GeminiKeyRequiredError,
+  resolveGeminiApiKey,
+  runBrowserAiTradeReview
+} from './lib/geminiClient';
 import { QuizzesTab } from './components/QuizzesTab';
 import { SimulatorTab } from './components/SimulatorTab';
 import { TraderProgressRail } from './components/TraderProgressRail';
@@ -821,6 +825,7 @@ export default function App() {
   const [aiReviewResult, setAiReviewResult] = useState<AiTradeReviewResult | null>(null);
   const [aiReviewLoading, setAiReviewLoading] = useState<boolean>(false);
   const [aiReviewError, setAiReviewError] = useState<string | null>(null);
+  const [aiReviewNeedsKey, setAiReviewNeedsKey] = useState<boolean>(false);
 
   // Audio Synth & Theme Mode (Default: Dark Mode)
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
@@ -1671,6 +1676,7 @@ export default function App() {
     setAiReviewResult(null);
     setAiReviewLoading(false);
     setAiReviewError(null);
+    setAiReviewNeedsKey(false);
     playTone(400, 'sine', 0.08);
   };
 
@@ -2214,6 +2220,7 @@ export default function App() {
     setCurrentBalanceInput(startingBalance);
     setAiReviewResult(null);
     setAiReviewError(null);
+    setAiReviewNeedsKey(false);
     playTone(300, 'sawtooth', 0.15);
 
     if (currentStudent?.id) {
@@ -2320,6 +2327,7 @@ export default function App() {
     setAuditShowAll(false);
     setAiReviewResult(null);
     setAiReviewError(null);
+    setAiReviewNeedsKey(false);
     if (nextPeriod !== 'ALL' && /^\d{4}-\d{2}$/.test(nextPeriod)) {
       const [y, m] = nextPeriod.split('-').map(Number);
       setPnlCalendarMonth(new Date(y, m - 1, 1));
@@ -2330,6 +2338,7 @@ export default function App() {
   const handleRunAiTradeReview = async () => {
     if (aiReviewLoading) return;
     setAiReviewError(null);
+    setAiReviewNeedsKey(false);
     if (scopedTrades.length === 0) {
       setAiReviewResult(null);
       setAiReviewError(
@@ -2339,11 +2348,19 @@ export default function App() {
       return;
     }
 
+    if (!resolveGeminiApiKey()) {
+      setAiReviewResult(null);
+      setAiReviewNeedsKey(true);
+      setAiReviewError('No built-in Gemini API key detected on this static host. Paste and save your Gemini API key below to analyze your trades.');
+      playTone(480, 'sine', 0.04);
+      return;
+    }
+
     setAiReviewLoading(true);
     playTone(580, 'sine', 0.04);
 
     try {
-      const review = await runServerAiTradeReview({
+      const review = await runBrowserAiTradeReview({
         periodLabel: `${selectedPeriodLabel} · Phase ${activeStudentPhase}`,
         startingBalance,
         trades: scopedTrades
@@ -2352,8 +2369,13 @@ export default function App() {
       setAiReviewResult(review);
       playSuccessChime();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unable to generate AI Desk Performance Review.';
-      setAiReviewError(msg);
+      if (err instanceof GeminiKeyRequiredError) {
+        setAiReviewNeedsKey(true);
+        setAiReviewError(err.message);
+      } else {
+        const msg = err instanceof Error ? err.message : 'Unable to generate AI Desk Performance Review.';
+        setAiReviewError(msg);
+      }
       playErrorTone();
     } finally {
       setAiReviewLoading(false);
@@ -4262,11 +4284,18 @@ export default function App() {
               review={aiReviewResult}
               isLoading={aiReviewLoading}
               error={aiReviewError}
+              needsApiKey={aiReviewNeedsKey}
               periodLabel={`${selectedPeriodLabel} · Phase ${activeStudentPhase}`}
               onRefresh={handleRunAiTradeReview}
+              onApiKeySaved={() => {
+                setAiReviewNeedsKey(false);
+                setAiReviewError(null);
+                handleRunAiTradeReview();
+              }}
               onDismiss={() => {
                 setAiReviewResult(null);
                 setAiReviewError(null);
+                setAiReviewNeedsKey(false);
               }}
             />
 

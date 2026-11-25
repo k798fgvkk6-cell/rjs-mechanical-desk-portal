@@ -6,9 +6,17 @@ import {
   Trash2,
   Loader2,
   AlertTriangle,
-  MessageSquare
+  MessageSquare,
+  KeyRound
 } from 'lucide-react';
-import { runServerDeskAiChat } from '../lib/geminiClient';
+import {
+  GeminiKeyRequiredError,
+  getBuiltInGeminiApiKey,
+  getSavedGeminiApiKey,
+  resolveGeminiApiKey,
+  runBrowserDeskAiChat,
+  saveGeminiApiKey
+} from '../lib/geminiClient';
 
 interface ChatMessage {
   id: string;
@@ -33,9 +41,14 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
   const [inputValue, setInputValue] = useState<string>('');
   const [isSending, setIsSending] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [needsKey, setNeedsKey] = useState<boolean>(() => !resolveGeminiApiKey());
+  const [showKeyEditor, setShowKeyEditor] = useState<boolean>(false);
+  const [keyInput, setKeyInput] = useState<string>(() => getSavedGeminiApiKey());
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const hasBuiltInKey = Boolean(getBuiltInGeminiApiKey());
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -45,15 +58,36 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
 
   useEffect(() => {
     if (isOpen) {
+      if (!resolveGeminiApiKey()) {
+        setNeedsKey(true);
+      }
       setTimeout(() => inputRef.current?.focus(), 120);
     }
   }, [isOpen]);
+
+  const handleSaveKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = saveGeminiApiKey(keyInput);
+    if (!cleaned) return;
+    setNeedsKey(false);
+    setShowKeyEditor(false);
+    setErrorMsg(null);
+    onPlayTone?.(640, 'sine', 0.04);
+  };
 
   const sendMessage = async (rawText: string) => {
     const text = rawText.trim();
     if (!text || isSending) return;
 
+    if (!resolveGeminiApiKey()) {
+      setNeedsKey(true);
+      setErrorMsg('Enter your Gemini API key above to activate RJS Desk AI.');
+      onPlayTone?.(320, 'sawtooth', 0.06);
+      return;
+    }
+
     setErrorMsg(null);
+    setNeedsKey(false);
     const userMsg: ChatMessage = {
       id: `u_${Date.now()}`,
       role: 'user',
@@ -66,7 +100,7 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
     onPlayTone?.(560, 'sine', 0.03);
 
     try {
-      const reply = await runServerDeskAiChat(
+      const reply = await runBrowserDeskAiChat(
         nextHistory.map((m) => ({ role: m.role, text: m.text }))
       );
 
@@ -78,8 +112,13 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
       setMessages((prev) => [...prev, modelMsg]);
       onPlayTone?.(700, 'sine', 0.04);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unable to reach RJS Desk AI right now.';
-      setErrorMsg(msg);
+      if (err instanceof GeminiKeyRequiredError) {
+        setNeedsKey(true);
+        setErrorMsg(err.message);
+      } else {
+        const msg = err instanceof Error ? err.message : 'Unable to reach RJS Desk AI right now.';
+        setErrorMsg(msg);
+      }
       onPlayTone?.(320, 'sawtooth', 0.06);
     } finally {
       setIsSending(false);
@@ -96,6 +135,8 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
     setErrorMsg(null);
     onPlayTone?.(440, 'sine', 0.03);
   };
+
+  const showKeyPanel = !hasBuiltInKey && (needsKey || showKeyEditor);
 
   return (
     <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
@@ -116,12 +157,23 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 </div>
                 <div className="text-[10px] font-mono text-slate-400">
-                  USTECH100 Mechanical Playbook Mentor
+                  USTECH100 Playbook · Gemini 2.5 Flash
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-1">
+              {!hasBuiltInKey && (
+                <button
+                  type="button"
+                  onClick={() => setShowKeyEditor((prev) => !prev)}
+                  className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-hairline bg-[#0e131e] text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+                  title="Configure Gemini API Key"
+                >
+                  <KeyRound className="w-3 h-3 text-amber-400" />
+                  <span>API Key</span>
+                </button>
+              )}
               {messages.length > 0 && (
                 <button
                   type="button"
@@ -144,6 +196,46 @@ export const AskDeskAiWidget: React.FC<AskDeskAiWidgetProps> = ({ onPlayTone }) 
               </button>
             </div>
           </div>
+
+          {/* Inline API Key Input Box when missing/toggled */}
+          {showKeyPanel && (
+            <div className="px-3.5 py-2.5 border-b border-hairline bg-[#070a12] space-y-2 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                  <KeyRound className="w-3 h-3" />
+                  <span>Enter Gemini API Key</span>
+                </span>
+                {showKeyEditor && !needsKey && (
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyEditor(false)}
+                    className="text-[10px] font-mono text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    Hide
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] font-mono text-slate-400">
+                Saved locally in your browser (rjs_gemini_api_key) for direct Gemini 2.5 Flash requests.
+              </p>
+              <form onSubmit={handleSaveKey} className="flex items-center gap-1.5">
+                <input
+                  type="password"
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  placeholder="AIza..."
+                  className="flex-1 bg-[#0a0d15] border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!keyInput.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-mono text-[11px] font-bold transition-colors cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Save Key
+                </button>
+              </form>
+            </div>
+          )}
 
           {/* Messages Area */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-3.5 space-y-3">
