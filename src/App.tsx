@@ -4961,7 +4961,7 @@ export default function App() {
               <div className="border border-slate-700 rounded-xl p-5 bg-[#07090e] space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <div>
-                    <span className="text-[10px] font-mono text-emerald-400 font-bold">RYAN JADE // MECHANICAL DESK</span>
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold">RYAN JADE // PORTAL</span>
                     <h3 className="text-sm font-bold text-white mt-0.5">{activeLesson.num}: {activeLesson.title}</h3>
                   </div>
                   <div className="text-right text-[10px] font-mono text-slate-400">
