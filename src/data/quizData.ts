@@ -497,7 +497,10 @@ export const QUIZ_SECTIONS: QuizSection[] = [
 
 export function extractLessonIdsFromCloud(rawList: unknown): string[] {
   if (!Array.isArray(rawList)) return [];
-  return rawList.filter((item): item is string => typeof item === 'string' && !item.startsWith('quiz_'));
+  return rawList.filter(
+    (item): item is string =>
+      typeof item === 'string' && !item.startsWith('quiz_') && !item.startsWith('phase_current_')
+  );
 }
 
 export function extractQuizProgressFromCloud(rawList: unknown): QuizProgressState {
@@ -545,6 +548,12 @@ export function mergeQuizProgress(a: QuizProgressState, b: QuizProgressState): Q
 
 export function mergeQuizTokensIntoCloudLessons(existingCloud: unknown, progress: QuizProgressState): string[] {
   const lessonOnly = extractLessonIdsFromCloud(existingCloud);
+  const phaseToken =
+    Array.isArray(existingCloud) && existingCloud.includes('phase_current_2')
+      ? ['phase_current_2']
+      : Array.isArray(existingCloud) && existingCloud.includes('phase_current_1')
+      ? ['phase_current_1']
+      : [];
   const quizTokens: string[] = [];
   for (const secId of [1, 2, 3, 4]) {
     const score = progress.bestScores[secId];
@@ -554,5 +563,12 @@ export function mergeQuizTokensIntoCloudLessons(existingCloud: unknown, progress
       quizTokens.push(`quiz_s${secId}_${effectiveScore}`);
     }
   }
-  return [...lessonOnly, ...quizTokens];
+  return [...lessonOnly, ...quizTokens, ...phaseToken];
+}
+
+export function mergeCurrentPhaseIntoCloudLessons(existingCloud: unknown, phase: 1 | 2): string[] {
+  const base = Array.isArray(existingCloud)
+    ? existingCloud.filter((item): item is string => typeof item === 'string' && !item.startsWith('phase_current_'))
+    : [];
+  return [...base, `phase_current_${phase}`];
 }

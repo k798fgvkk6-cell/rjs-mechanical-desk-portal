@@ -31,16 +31,29 @@ import {
   CandlestickChart,
   Users,
   ClipboardList,
-  X
+  X,
+  Calendar,
+  Sparkles
 } from 'lucide-react';
 import { Chart as ChartJS, registerables } from 'chart.js';
-import { supabase, StudentSession, LessonAssignmentRecord } from './lib/supabase';
+import {
+  supabase,
+  StudentSession,
+  LessonAssignmentRecord,
+  extractCurrentPhase,
+  encodeTradePhaseNote,
+  decodeTradePhaseAndNote,
+  isPhase2SwingWin
+} from './lib/supabase';
+import { runServerAiTradeReview } from './lib/geminiClient';
 import { QuizzesTab } from './components/QuizzesTab';
 import { SimulatorTab } from './components/SimulatorTab';
 import { TraderProgressRail } from './components/TraderProgressRail';
 import { AdminStudentManagerModal } from './components/AdminStudentManagerModal';
 import { LessonAssignmentPanel } from './components/LessonAssignmentPanel';
 import { AdminAssignmentsModal } from './components/AdminAssignmentsModal';
+import { AiTradeReviewCard, AiTradeReviewResult } from './components/AiTradeReviewCard';
+import { AskDeskAiWidget } from './components/AskDeskAiWidget';
 import {
   DEFAULT_TIER_STATS,
   SimulatorDifficulty,
@@ -102,6 +115,7 @@ interface AuditTrade {
   pnl: number;
   balanceAfter?: number;
   note: string;
+  phase?: 1 | 2;
   createdAt: number;
 }
 
@@ -803,6 +817,11 @@ export default function App() {
   const [nyCountdown, setNyCountdown] = useState<string>('CALCULATING...');
   const [isNyActive, setIsNyActive] = useState<boolean>(false);
 
+  // AI Trade Logbook Review state
+  const [aiReviewResult, setAiReviewResult] = useState<AiTradeReviewResult | null>(null);
+  const [aiReviewLoading, setAiReviewLoading] = useState<boolean>(false);
+  const [aiReviewError, setAiReviewError] = useState<string | null>(null);
+
   // Audio Synth & Theme Mode (Default: Dark Mode)
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -998,6 +1017,12 @@ export default function App() {
   const [confirmResetAll, setConfirmResetAll] = useState<boolean>(false);
   const resetConfirmTimerRef = useRef<number | null>(null);
   const [auditFilter, setAuditFilter] = useState<'ALL' | 'WINS' | 'LOSSES' | 'BE'>('ALL');
+  const [selectedAuditPeriod, setSelectedAuditPeriod] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [auditPage, setAuditPage] = useState<number>(1);
+  const [auditShowAll, setAuditShowAll] = useState<boolean>(false);
   const [pnlCalendarMonth, setPnlCalendarMonth] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1063,9 +1088,13 @@ export default function App() {
       try {
         const student = JSON.parse(savedSession);
         if (student && student.id && isAuth) {
-          setCurrentStudent(student);
+          const restoredStudent: StudentSession = {
+            ...student,
+            currentPhase: extractCurrentPhase(student.unlocked_lessons, student.current_phase ?? student.currentPhase)
+          };
+          setCurrentStudent(restoredStudent);
           setIsAuthenticated(true);
-          const savedLessonIds = extractLessonIdsFromCloud(student.unlocked_lessons);
+          const savedLessonIds = extractLessonIdsFromCloud(restoredStudent.unlocked_lessons);
           if (savedLessonIds.length > 0) {
             setUnlockedKeywords(savedLessonIds);
           }
@@ -1089,6 +1118,7 @@ export default function App() {
                     t.result ?? t.outcome,
                     Number(t.pnl ?? t.net_pnl)
                   );
+                  const decoded = decodeTradePhaseAndNote(t.note ?? t.notes, t.phase);
                   return {
                     ...t,
                     id: t.id || 'T' + (Date.now() + idx),
@@ -1102,7 +1132,8 @@ export default function App() {
                     result: calc.outcomeBadge,
                     rrr: calc.rrrLabel,
                     pnl: calc.pnl,
-                    note: t.note || '',
+                    note: decoded.note,
+                    phase: decoded.phase,
                     createdAt: t.createdAt || Date.now() + idx
                   };
                 });
@@ -1124,13 +1155,16 @@ export default function App() {
               .maybeSingle()
               .then(({ data: freshStudent, error }) => {
                 if (freshStudent && !error) {
+                  const unlockedArr = Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [];
                   const refreshed: StudentSession = {
                     id: freshStudent.id,
                     full_name: freshStudent.full_name,
                     email: freshStudent.email ?? null,
                     tier: freshStudent.tier || 'phase1',
+                    current_phase: freshStudent.current_phase ?? null,
+                    currentPhase: extractCurrentPhase(unlockedArr, freshStudent.current_phase),
                     is_active: freshStudent.is_active,
-                    unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
+                    unlocked_lessons: unlockedArr,
                     passcode: freshStudent.passcode,
                     created_at: freshStudent.created_at
                   };
@@ -1210,13 +1244,16 @@ export default function App() {
         return;
       }
 
+      const unlockedArr = Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [];
       const refreshed: StudentSession = {
         id: freshStudent.id,
         full_name: freshStudent.full_name,
         email: freshStudent.email ?? null,
         tier: freshStudent.tier || 'phase1',
+        current_phase: freshStudent.current_phase ?? null,
+        currentPhase: extractCurrentPhase(unlockedArr, freshStudent.current_phase),
         is_active: freshStudent.is_active,
-        unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
+        unlocked_lessons: unlockedArr,
         passcode: freshStudent.passcode,
         created_at: freshStudent.created_at
       };
@@ -1465,50 +1502,66 @@ export default function App() {
   -------------------------------------------------------------- */
   const loadStudentTrades = async (studentId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('trade_logs')
-        .select('*')
-        .eq('student_id', studentId)
-        .order('trade_date', { ascending: true })
-        .order('created_at', { ascending: true });
+      const pageSize = 1000;
+      let from = 0;
+      let allRows: any[] = [];
 
-      if (error) {
-        console.error('Error loading trade logs from Supabase:', error);
-        return;
+      while (true) {
+        const { data, error } = await supabase
+          .from('trade_logs')
+          .select('*')
+          .eq('student_id', studentId)
+          .order('trade_date', { ascending: true })
+          .order('created_at', { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          console.error('Error loading trade logs from Supabase:', error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          allRows = allRows.concat(data);
+        }
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
       }
 
-      if (data) {
-        const mappedTrades: AuditTrade[] = data.map((t, idx) => {
-          const calc = calculateDynamicTradeMetrics(
-            t.entry_price,
-            t.stop_loss,
-            t.take_profit,
-            t.outcome,
-            Number(t.net_pnl)
-          );
-          return {
-            id: t.id,
-            pair: 'USTECH100',
-            tradeDate: t.trade_date || new Date().toISOString().split('T')[0],
-            position: (t.direction as 'BUY' | 'SELL') || 'BUY',
-            entryPrice: t.entry_price != null ? String(t.entry_price) : '-',
-            lotSize: Number(t.lot_size) || 1.0,
-            stopLoss: t.stop_loss != null ? String(t.stop_loss) : '-',
-            takeProfit: t.take_profit != null ? String(t.take_profit) : '-',
-            executionTime: t.created_at ? new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '09:30 PM PHT',
-            result: calc.outcomeBadge,
-            rrr: calc.rrrLabel,
-            pnl: calc.pnl,
-            note: t.notes || '',
-            createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now() + idx
-          };
-        });
+      const mappedTrades: AuditTrade[] = allRows.map((t, idx) => {
+        const calc = calculateDynamicTradeMetrics(
+          t.entry_price,
+          t.stop_loss,
+          t.take_profit,
+          t.outcome,
+          Number(t.net_pnl)
+        );
+        const decoded = decodeTradePhaseAndNote(t.notes, t.phase);
+        return {
+          id: t.id,
+          pair: 'USTECH100',
+          tradeDate: t.trade_date || new Date().toISOString().split('T')[0],
+          position: (t.direction as 'BUY' | 'SELL') || 'BUY',
+          entryPrice: t.entry_price != null ? String(t.entry_price) : '-',
+          lotSize: Number(t.lot_size) || 1.0,
+          stopLoss: t.stop_loss != null ? String(t.stop_loss) : '-',
+          takeProfit: t.take_profit != null ? String(t.take_profit) : '-',
+          executionTime: t.created_at ? new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '09:30 PM PHT',
+          result: calc.outcomeBadge,
+          rrr: calc.rrrLabel,
+          pnl: calc.pnl,
+          note: decoded.note,
+          phase: decoded.phase,
+          createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now() + idx
+        };
+      });
 
-        setTrades(mappedTrades);
-        localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(mappedTrades));
-        const net = mappedTrades.reduce((acc, tr) => acc + tr.pnl, 0);
-        setCurrentBalanceInput(startingBalance + net);
-      }
+      setTrades(mappedTrades);
+      localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(mappedTrades));
+      const activePhase = extractCurrentPhase(currentStudent?.unlocked_lessons, currentStudent?.current_phase ?? currentStudent?.currentPhase);
+      const net = mappedTrades
+        .filter((tr) => (tr.phase || 1) === activePhase)
+        .reduce((acc, tr) => acc + tr.pnl, 0);
+      setCurrentBalanceInput(startingBalance + net);
     } catch (err) {
       console.error('Failed to load student trade logs:', err);
     }
@@ -1546,13 +1599,16 @@ export default function App() {
       }
 
       // Valid active student found
+      const unlockedArr = Array.isArray(student.unlocked_lessons) ? student.unlocked_lessons : [];
       const sessionData: StudentSession = {
         id: student.id,
         full_name: student.full_name,
         email: student.email ?? null,
         tier: student.tier || 'phase1',
+        current_phase: student.current_phase ?? null,
+        currentPhase: extractCurrentPhase(unlockedArr, student.current_phase),
         is_active: student.is_active,
-        unlocked_lessons: Array.isArray(student.unlocked_lessons) ? student.unlocked_lessons : [],
+        unlocked_lessons: unlockedArr,
         passcode: student.passcode,
         created_at: student.created_at
       };
@@ -1612,6 +1668,9 @@ export default function App() {
     setStudentAssignmentsById({});
     setLightboxState(null);
     setAdminToast(null);
+    setAiReviewResult(null);
+    setAiReviewLoading(false);
+    setAiReviewError(null);
     playTone(400, 'sine', 0.08);
   };
 
@@ -2016,6 +2075,12 @@ export default function App() {
     const cleanStop = parseNumericPrice(tradeStopLoss);
     const cleanTarget = parseNumericPrice(tradeTakeProfit);
 
+    const tradePhase: 1 | 2 = extractCurrentPhase(
+      currentStudent?.unlocked_lessons,
+      currentStudent?.current_phase ?? currentStudent?.currentPhase
+    );
+    const encodedNotes = encodeTradePhaseNote(tradePhase, '');
+
     let assignedId = 'T' + Date.now();
 
     // If student is logged in, insert to Supabase trade_logs
@@ -2033,7 +2098,7 @@ export default function App() {
             take_profit: cleanTarget,
             outcome,
             net_pnl: pnlVal,
-            notes: null
+            notes: encodedNotes
           })
           .select()
           .single();
@@ -2062,6 +2127,7 @@ export default function App() {
       rrr,
       pnl: pnlVal,
       note: '',
+      phase: tradePhase,
       createdAt: Date.now()
     };
 
@@ -2069,8 +2135,18 @@ export default function App() {
     setTrades(nextTrades);
     localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(nextTrades));
 
-    // Update calculator current balance
-    const net = nextTrades.reduce((acc, t) => acc + calculateDynamicTradeMetrics(t.entryPrice, t.stopLoss, t.takeProfit, t.result, t.pnl).pnl, 0);
+    // If student logged a trade for a specific month while viewing another month, focus that month cleanly
+    const committedMonthKey = cleanDate.slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(committedMonthKey) && selectedAuditPeriod !== 'ALL' && selectedAuditPeriod !== committedMonthKey) {
+      setSelectedAuditPeriod(committedMonthKey);
+      const [cy, cm] = committedMonthKey.split('-').map(Number);
+      setPnlCalendarMonth(new Date(cy, cm - 1, 1));
+    }
+
+    // Update calculator current balance strictly from active phase trades
+    const net = nextTrades
+      .filter(t => (t.phase || 1) === tradePhase)
+      .reduce((acc, t) => acc + calculateDynamicTradeMetrics(t.entryPrice, t.stopLoss, t.takeProfit, t.result, t.pnl).pnl, 0);
     setCurrentBalanceInput(startingBalance + net);
 
     // Reset Form fields
@@ -2084,10 +2160,16 @@ export default function App() {
     const nextTrades = trades.filter(t => t.id !== id);
     setTrades(nextTrades);
     localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(nextTrades));
-    const net = nextTrades.reduce(
-      (acc, t) => acc + calculateDynamicTradeMetrics(t.entryPrice, t.stopLoss, t.takeProfit, t.result, t.pnl).pnl,
-      0
+    const activePh = extractCurrentPhase(
+      currentStudent?.unlocked_lessons,
+      currentStudent?.current_phase ?? currentStudent?.currentPhase
     );
+    const net = nextTrades
+      .filter(t => (t.phase || 1) === activePh)
+      .reduce(
+        (acc, t) => acc + calculateDynamicTradeMetrics(t.entryPrice, t.stopLoss, t.takeProfit, t.result, t.pnl).pnl,
+        0
+      );
     setCurrentBalanceInput(startingBalance + net);
     playTone(330, 'sawtooth', 0.08);
 
@@ -2130,6 +2212,8 @@ export default function App() {
     localStorage.removeItem(TRADES_STORAGE_KEY);
     localStorage.removeItem('rjs_audit_trades_log');
     setCurrentBalanceInput(startingBalance);
+    setAiReviewResult(null);
+    setAiReviewError(null);
     playTone(300, 'sawtooth', 0.15);
 
     if (currentStudent?.id) {
@@ -2162,15 +2246,15 @@ export default function App() {
   });
 
   const handleExportCSV = () => {
-    if (recalculatedTrades.length === 0) {
-      alert('No audit trades to export.');
+    if (scopedTrades.length === 0) {
+      alert('No audit trades to export for this period.');
       return;
     }
     const startingBal = parseFloat(localStorage.getItem(START_BAL_KEY) || '10000');
     let runningBal = startingBal;
 
     let csv = 'Index,Date_Time,Pair,Position,Position_Value,Lot_Size,Stop_Loss,Take_Profit,Result,RRR,PnL_PHP,Running_Balance_PHP,Discipline_Notes\n';
-    recalculatedTrades.forEach((t, i) => {
+    scopedTrades.forEach((t, i) => {
       runningBal += t.pnl;
       const cleanNote = (t.note || '').replace(/"/g, '""');
       csv += `${i + 1},"${t.tradeDate || ''} ${t.executionTime || '09:30 PM PHT'}","${t.pair || 'USTECH100'}","${t.position}","${t.entryPrice || '-'}","${Number(t.lotSize ?? 1.0).toFixed(2)}","${t.stopLoss || '-'}","${t.takeProfit || '-'}","${t.result}","${t.rrr}",${t.pnl},${runningBal},"${cleanNote}"\n`;
@@ -2179,31 +2263,123 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `RyanJade_Phase2_AuditLedger_${new Date().toISOString().slice(0, 10)}.csv`);
+    const suffix = effectiveAuditPeriod === 'ALL' ? 'AllTime' : effectiveAuditPeriod;
+    link.setAttribute('download', `RyanJade_AuditLedger_${suffix}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     playTone(700, 'sine', 0.05);
   };
 
-  const netPnL = recalculatedTrades.reduce((acc, t) => acc + t.pnl, 0);
+  // Active Trading Phase (1 or 2, controlled by Master Admin in ADMIN: STUDENTS)
+  const activeStudentPhase: 1 | 2 = extractCurrentPhase(
+    currentStudent?.unlocked_lessons,
+    currentStudent?.current_phase ?? currentStudent?.currentPhase
+  );
+
+  // Separate active phase trades vs archived Phase 1 trades (when promoted to Phase 2)
+  const activePhaseTrades = recalculatedTrades.filter(t => (t.phase || 1) === activeStudentPhase);
+  const phase1ArchivedTrades =
+    activeStudentPhase === 2 ? recalculatedTrades.filter(t => (t.phase || 1) === 1) : [];
+  const phase2SwingWinsCount = recalculatedTrades.filter(t => isPhase2SwingWin(t)).length;
+
+  // Dynamic Month / Year Filter Options (scoped strictly to active phase trades)
+  const nowLocal = new Date();
+  const currentMonthKey = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}`;
+  const todayIsoKey = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+
+  const monthCountsMap = new Map<string, number>();
+  monthCountsMap.set(currentMonthKey, 0);
+  activePhaseTrades.forEach(t => {
+    const ym = (t.tradeDate || '').slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(ym)) {
+      monthCountsMap.set(ym, (monthCountsMap.get(ym) || 0) + 1);
+    }
+  });
+
+  const availableMonthKeys = Array.from(monthCountsMap.keys()).sort((a, b) => b.localeCompare(a));
+  const effectiveAuditPeriod =
+    selectedAuditPeriod === 'ALL' || monthCountsMap.has(selectedAuditPeriod)
+      ? selectedAuditPeriod
+      : currentMonthKey;
+
+  const formatPeriodLabel = (periodKey: string): string => {
+    if (periodKey === 'ALL') return 'All Time';
+    const [yStr, mStr] = periodKey.split('-');
+    const y = Number(yStr);
+    const m = Number(mStr);
+    if (!y || !m) return periodKey;
+    return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const selectedPeriodLabel = formatPeriodLabel(effectiveAuditPeriod);
+
+  const handleSelectAuditPeriod = (nextPeriod: string) => {
+    setSelectedAuditPeriod(nextPeriod);
+    setAuditPage(1);
+    setAuditShowAll(false);
+    setAiReviewResult(null);
+    setAiReviewError(null);
+    if (nextPeriod !== 'ALL' && /^\d{4}-\d{2}$/.test(nextPeriod)) {
+      const [y, m] = nextPeriod.split('-').map(Number);
+      setPnlCalendarMonth(new Date(y, m - 1, 1));
+    }
+    playTone(540, 'sine', 0.03);
+  };
+
+  const handleRunAiTradeReview = async () => {
+    if (aiReviewLoading) return;
+    setAiReviewError(null);
+    if (scopedTrades.length === 0) {
+      setAiReviewResult(null);
+      setAiReviewError(
+        `No Phase ${activeStudentPhase} trades logged in ${selectedPeriodLabel}. Log at least one trade or switch to All Time to run an AI Desk Performance Review.`
+      );
+      playErrorTone();
+      return;
+    }
+
+    setAiReviewLoading(true);
+    playTone(580, 'sine', 0.04);
+
+    try {
+      const review = await runServerAiTradeReview({
+        periodLabel: `${selectedPeriodLabel} · Phase ${activeStudentPhase}`,
+        startingBalance,
+        trades: scopedTrades
+      });
+
+      setAiReviewResult(review);
+      playSuccessChime();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unable to generate AI Desk Performance Review.';
+      setAiReviewError(msg);
+      playErrorTone();
+    } finally {
+      setAiReviewLoading(false);
+    }
+  };
+
+  const scopedTrades =
+    effectiveAuditPeriod === 'ALL'
+      ? activePhaseTrades
+      : activePhaseTrades.filter(t => (t.tradeDate || '').slice(0, 7) === effectiveAuditPeriod);
+
+  const netPnL = scopedTrades.reduce((acc, t) => acc + t.pnl, 0);
   const currentTotalBalance = startingBalance + netPnL;
   const balanceDelta = currentTotalBalance - startingBalance;
   const pctDelta = ((balanceDelta / startingBalance) * 100).toFixed(1);
 
-  const winsCount = recalculatedTrades.filter(t => t.pnl > 0).length;
-  const lossesCount = recalculatedTrades.filter(t => t.pnl < 0).length;
-  const beCount = recalculatedTrades.filter(t => t.pnl === 0).length;
-  const totalTradesCount = recalculatedTrades.length;
+  const winsCount = scopedTrades.filter(t => t.pnl > 0).length;
+  const lossesCount = scopedTrades.filter(t => t.pnl < 0).length;
+  const beCount = scopedTrades.filter(t => t.pnl === 0).length;
+  const totalTradesCount = scopedTrades.length;
   const winRate = totalTradesCount > 0 ? ((winsCount / totalTradesCount) * 100).toFixed(1) : '0.0';
   const totalR = Number((netPnL / BASE_ONE_R_PHP).toFixed(2)).toString();
 
-  const cappedAuditTrades = Math.min(totalTradesCount, 20);
-  const auditProgressPct = ((cappedAuditTrades / 20) * 100).toFixed(0);
-
-  // Filtered trades for table
+  // Filtered trades for active phase table (scoped to selected Month/Year + outcome filter)
   let runningBal = startingBalance;
-  const tradesWithBalance = recalculatedTrades.map((t, idx) => {
+  const tradesWithBalance = scopedTrades.map((t, idx) => {
     runningBal += t.pnl;
     return { ...t, index: idx + 1, balanceAfter: runningBal };
   });
@@ -2215,23 +2391,40 @@ export default function App() {
     return true;
   });
 
-  // Goal Trajectory Metrics (Milestone Target: ₱10,000)
-  const milestoneTarget = 10000;
+  // Archived Phase 1 trades (when student is in Phase 2) - visible for reference, excluded from Phase 2 stats
+  let archivedRunningBal = startingBalance;
+  const archivedPhase1WithBalance = phase1ArchivedTrades.map((t, idx) => {
+    archivedRunningBal += t.pnl;
+    return { ...t, index: idx + 1, balanceAfter: archivedRunningBal };
+  });
+  const archivedPhase1NetPnL = phase1ArchivedTrades.reduce((acc, t) => acc + t.pnl, 0);
+
+  const AUDIT_PAGE_SIZE = 25;
+  const reversedFilteredTrades = [...filteredTrades].reverse();
+  const auditTotalPages = Math.max(1, Math.ceil(reversedFilteredTrades.length / AUDIT_PAGE_SIZE));
+  const safeAuditPage = Math.min(auditPage, auditTotalPages);
+  const visibleAuditTrades =
+    auditShowAll || reversedFilteredTrades.length <= AUDIT_PAGE_SIZE
+      ? reversedFilteredTrades
+      : reversedFilteredTrades.slice((safeAuditPage - 1) * AUDIT_PAGE_SIZE, safeAuditPage * AUDIT_PAGE_SIZE);
+
+  // Goal Trajectory Metrics (Phase 1: ₱10,000 | Phase 2: ₱20,000)
+  const milestoneTarget = activeStudentPhase === 2 ? 20000 : 10000;
   const trajectoryProgressPct = Math.min(100, Math.max(0, (netPnL / milestoneTarget) * 100));
 
   let peakGain = 0;
   let maxDrawdown = 0;
   let runningCum = 0;
-  recalculatedTrades.forEach(t => {
+  scopedTrades.forEach(t => {
     runningCum += t.pnl;
     if (runningCum > peakGain) peakGain = runningCum;
     if (runningCum < maxDrawdown) maxDrawdown = runningCum;
   });
   const distanceToTarget = Math.max(0, milestoneTarget - netPnL);
 
-  // Group recalculated trades by YYYY-MM-DD for Trading P&L Calendar
+  // Group active phase trades by YYYY-MM-DD for Trading P&L Calendar
   const dailyTradeStats = new Map<string, { pnl: number; count: number }>();
-  recalculatedTrades.forEach(t => {
+  activePhaseTrades.forEach(t => {
     const dateKey = (t.tradeDate || '').slice(0, 10);
     if (!dateKey) return;
     const prev = dailyTradeStats.get(dateKey) || { pnl: 0, count: 0 };
@@ -2247,8 +2440,6 @@ export default function App() {
   const pnlCalDaysInMonth = new Date(pnlCalYear, pnlCalMonthIdx + 1, 0).getDate();
   const pnlCalLeadingBlanks = (new Date(pnlCalYear, pnlCalMonthIdx, 1).getDay() + 6) % 7;
   const pnlCalTotalCells = Math.ceil((pnlCalLeadingBlanks + pnlCalDaysInMonth) / 7) * 7;
-  const nowLocal = new Date();
-  const todayIsoKey = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
 
   // Initialize and Reactively Update Chart.js Trajectory Canvas
   useEffect(() => {
@@ -2260,7 +2451,7 @@ export default function App() {
     const labels: string[] = ['Start'];
     const dataPoints: number[] = [0];
     let cum = 0;
-    recalculatedTrades.forEach((t, i) => {
+    scopedTrades.forEach((t, i) => {
       cum += t.pnl;
       labels.push(`Trade ${i + 1}`);
       dataPoints.push(cum);
@@ -2295,7 +2486,9 @@ export default function App() {
       chartInstanceRef.current.data.labels = labels;
       chartInstanceRef.current.data.datasets[0].data = dataPoints;
       (chartInstanceRef.current.data.datasets[0] as any).pointBorderColor = chartTheme.pointBorderColor;
+      (chartInstanceRef.current.data.datasets[0] as any).pointRadius = scopedTrades.length > 60 ? 2 : 4;
       if (chartInstanceRef.current.data.datasets[1]) {
+        chartInstanceRef.current.data.datasets[1].label = `₱${milestoneTarget.toLocaleString()} Milestone`;
         chartInstanceRef.current.data.datasets[1].data = milestoneLineData;
       }
       const opts = chartInstanceRef.current.options;
@@ -2326,7 +2519,7 @@ export default function App() {
             data: dataPoints,
             borderWidth: 2.5,
             tension: 0.25,
-            pointRadius: 4,
+            pointRadius: scopedTrades.length > 60 ? 2 : 4,
             pointHoverRadius: 6,
             pointBackgroundColor: (context) => {
               const index = context.dataIndex;
@@ -2351,7 +2544,7 @@ export default function App() {
             }
           },
           {
-            label: '₱10,000 Milestone',
+            label: `₱${milestoneTarget.toLocaleString()} Milestone`,
             data: milestoneLineData,
             borderColor: '#f59e0b',
             borderWidth: 1.5,
@@ -2437,7 +2630,7 @@ export default function App() {
         chartInstanceRef.current = null;
       }
     };
-  }, [activeTab, trades, isBrightMode]);
+  }, [activeTab, trades, effectiveAuditPeriod, isBrightMode]);
 
   /* -------------------------------------------------------------
      AUTHENTICATION GATE OVERLAY
@@ -2732,7 +2925,7 @@ export default function App() {
               <FileSpreadsheet className="w-4 h-4" />
               <span>TRADING LOGS</span>
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">
-                {trades.length}/20
+                {activePhaseTrades.length} LOGS
               </span>
             </button>
 
@@ -3763,7 +3956,69 @@ export default function App() {
         {/* ============================================================== */}
         {activeTab === 'audit' && (
           <div className="space-y-6">
-            
+
+            {/* Month / Year Filter Bar */}
+            <div className="glass-card rounded-xl px-4 py-3 border-hairline flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-mono font-bold uppercase tracking-wider text-white flex items-center gap-2 flex-wrap">
+                    <span>Month / Year Filter</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${activeStudentPhase === 2 ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300' : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'}`}>
+                      PHASE {activeStudentPhase} ACTIVE
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-400">
+                    Showing <span className="text-emerald-400 font-semibold">{selectedPeriodLabel}</span> · {totalTradesCount} Phase {activeStudentPhase} {totalTradesCount === 1 ? 'trade' : 'trades'} ({activePhaseTrades.length} in Phase {activeStudentPhase})
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto font-mono text-xs">
+                <select
+                  value={effectiveAuditPeriod}
+                  onChange={(e) => handleSelectAuditPeriod(e.target.value)}
+                  aria-label="Filter trading logs by Month and Year"
+                  className="bg-[#0a0d15] border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer flex-1 sm:flex-initial"
+                >
+                  {availableMonthKeys.map((mKey) => (
+                    <option key={mKey} value={mKey}>
+                      {formatPeriodLabel(mKey)} ({monthCountsMap.get(mKey) || 0})
+                    </option>
+                  ))}
+                  <option value="ALL">All Time ({activePhaseTrades.length})</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectAuditPeriod(effectiveAuditPeriod === 'ALL' ? currentMonthKey : 'ALL')}
+                  className={`px-3 py-1.5 rounded-lg border font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                    effectiveAuditPeriod === 'ALL'
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                      : 'bg-[#0e131e] border-hairline text-slate-300 hover:text-white hover:border-slate-500'
+                  }`}
+                >
+                  {effectiveAuditPeriod === 'ALL' ? 'Current Month' : 'All Time'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRunAiTradeReview}
+                  disabled={aiReviewLoading}
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-[0_0_16px_rgba(16,185,129,0.28)]"
+                >
+                  {aiReviewLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  <span>{aiReviewLoading ? 'ANALYZING...' : 'AI DESK PERFORMANCE REVIEW'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* Top Metric Stats Ribbon */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
               
@@ -3791,7 +4046,7 @@ export default function App() {
                   {netPnL >= 0 ? '+' : '-'}₱{Math.abs(netPnL).toLocaleString()}
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                  {parseFloat(totalR) >= 0 ? '+' : ''}{totalR}R TOTAL
+                  {parseFloat(totalR) >= 0 ? '+' : ''}{totalR}R · {selectedPeriodLabel}
                 </div>
               </div>
 
@@ -3804,16 +4059,15 @@ export default function App() {
               </div>
 
               <div className="glass-card rounded-xl p-4 border-emerald-500/30 col-span-2 md:col-span-1 bg-emerald-950/10">
-                <div className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-semibold flex justify-between">
-                  <span>Audit Block</span>
-                  <span className="num-mono">{totalTradesCount} / 20</span>
+                <div className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-semibold flex justify-between items-center gap-2">
+                  <span>Total Trades</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">UNLIMITED</span>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-2 mt-2.5 overflow-hidden">
-                  <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{ width: `${auditProgressPct}%` }}></div>
+                <div className="text-xl font-bold font-mono text-white num-mono mt-1">
+                  {totalTradesCount} {totalTradesCount === 1 ? 'Trade' : 'Trades'}
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono mt-1.5 flex justify-between">
-                  <span>Sample Size Gate</span>
-                  <span className="text-emerald-400">{auditProgressPct}%</span>
+                <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                  {selectedPeriodLabel}
                 </div>
               </div>
 
@@ -4003,17 +4257,60 @@ export default function App() {
               </form>
             </div>
 
-            {/* Streamlined Audit Execution Journal Table */}
+            {/* AI Trade Logbook Leak & Tilt Coaching Report Card */}
+            <AiTradeReviewCard
+              review={aiReviewResult}
+              isLoading={aiReviewLoading}
+              error={aiReviewError}
+              periodLabel={`${selectedPeriodLabel} · Phase ${activeStudentPhase}`}
+              onRefresh={handleRunAiTradeReview}
+              onDismiss={() => {
+                setAiReviewResult(null);
+                setAiReviewError(null);
+              }}
+            />
+
+            {/* Streamlined Audit Execution Journal Table (Active Phase) */}
             <div className="glass-card rounded-xl p-4 sm:p-5 border-hairline">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-hairline mb-3 gap-3">
                 <div>
-                  <h4 className="text-sm font-bold text-white uppercase tracking-wide">Audit Execution Journal</h4>
-                  <p className="text-[11px] font-mono text-slate-400 mt-0.5">Real-time mechanical trading log</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-white uppercase tracking-wide">
+                      {activeStudentPhase === 2 ? 'PHASE 2 TRADES' : 'PHASE 1 TRADES // AUDIT EXECUTION JOURNAL'}
+                    </h4>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                      activeStudentPhase === 2
+                        ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                        : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                    }`}>
+                      PHASE {activeStudentPhase}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                    {selectedPeriodLabel} · {filteredTrades.length} {filteredTrades.length === 1 ? 'entry' : 'entries'} shown
+                  </p>
                 </div>
                 <div className="flex items-center flex-wrap gap-2 text-xs font-mono">
                   <select
+                    value={effectiveAuditPeriod}
+                    onChange={(e) => handleSelectAuditPeriod(e.target.value)}
+                    aria-label="Journal Month and Year Filter"
+                    className="bg-[#0a0d15] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    {availableMonthKeys.map((mKey) => (
+                      <option key={mKey} value={mKey}>
+                        {formatPeriodLabel(mKey)} ({monthCountsMap.get(mKey) || 0})
+                      </option>
+                    ))}
+                    <option value="ALL">All Time ({activePhaseTrades.length})</option>
+                  </select>
+
+                  <select
                     value={auditFilter}
-                    onChange={(e) => setAuditFilter(e.target.value as 'ALL' | 'WINS' | 'LOSSES' | 'BE')}
+                    onChange={(e) => {
+                      setAuditFilter(e.target.value as 'ALL' | 'WINS' | 'LOSSES' | 'BE');
+                      setAuditPage(1);
+                    }}
                     className="bg-[#0a0d15] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none cursor-pointer"
                   >
                     <option value="ALL">All Outcomes</option>
@@ -4063,7 +4360,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-hairline">
-                    {[...filteredTrades].reverse().map(t => {
+                    {visibleAuditTrades.map(t => {
                       const isWin = t.pnl > 0;
                       const isLoss = t.pnl < 0;
                       let resultBadge = '';
@@ -4162,13 +4459,152 @@ export default function App() {
                   <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 text-slate-500 mx-auto flex items-center justify-center mb-3">
                     <FileSpreadsheet className="w-6 h-6" />
                   </div>
-                  <p className="text-sm text-slate-400 font-medium">No audit trades committed yet.</p>
+                  <p className="text-sm text-slate-400 font-medium">
+                    No trades logged for {selectedPeriodLabel}.
+                  </p>
                   <p className="text-xs text-slate-500 mt-1 font-mono">
-                    Execute your setup during NY Cash Open and record your first trade.
+                    {trades.length > 0
+                      ? 'Switch the Month / Year filter above or commit a new trade for this period.'
+                      : 'Execute your setup during NY Cash Open and record your first trade.'}
                   </p>
                 </div>
               )}
+
+              {reversedFilteredTrades.length > AUDIT_PAGE_SIZE && (
+                <div className="mt-3 pt-3 border-t border-hairline flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                  <span className="text-slate-400">
+                    {auditShowAll
+                      ? `Showing all ${reversedFilteredTrades.length} trades`
+                      : `Showing ${(safeAuditPage - 1) * AUDIT_PAGE_SIZE + 1}–${Math.min(
+                          safeAuditPage * AUDIT_PAGE_SIZE,
+                          reversedFilteredTrades.length
+                        )} of ${reversedFilteredTrades.length} trades`}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {!auditShowAll && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={safeAuditPage <= 1}
+                          onClick={() => setAuditPage(p => Math.max(1, p - 1))}
+                          className="px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 hover:text-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          Prev
+                        </button>
+                        <span className="px-2 text-slate-300">
+                          {safeAuditPage} / {auditTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={safeAuditPage >= auditTotalPages}
+                          onClick={() => setAuditPage(p => Math.min(auditTotalPages, p + 1))}
+                          className="px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 hover:text-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setAuditShowAll(prev => !prev)}
+                      className="px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-emerald-400 hover:border-emerald-500/40 cursor-pointer"
+                    >
+                      {auditShowAll ? 'Paginate (25/page)' : 'Show All'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Separated & Muted Phase 1 Archive (Visible when promoted to Phase 2) */}
+            {activeStudentPhase === 2 && archivedPhase1WithBalance.length > 0 && (
+              <div className="glass-card rounded-xl p-4 sm:p-5 border-hairline opacity-75">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-hairline mb-3 gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wide">
+                        PHASE 1 TRADES (ARCHIVED)
+                      </h4>
+                      <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400 font-mono text-[10px] font-bold">
+                        PHASE 1
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-[#0e131e] border border-hairline text-slate-500 font-mono text-[10px]">
+                        EXCLUDED FROM PHASE 2 STATS
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                      {archivedPhase1WithBalance.length} historical Phase 1 {archivedPhase1WithBalance.length === 1 ? 'trade' : 'trades'} · Archived Net P&amp;L:{' '}
+                      <span className="font-semibold text-slate-300">
+                        {archivedPhase1NetPnL >= 0 ? '+' : '-'}₱{Math.abs(archivedPhase1NetPnL).toLocaleString()}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-[#090c13] text-slate-500 uppercase text-[10px] tracking-wider border-b border-hairline">
+                      <tr>
+                        <th className="py-2 px-3">#</th>
+                        <th className="py-2 px-3">DATE &amp; TIME</th>
+                        <th className="py-2 px-3">PHASE</th>
+                        <th className="py-2 px-3">POSITION</th>
+                        <th className="py-2 px-3">BRACKET</th>
+                        <th className="py-2 px-3">OUTCOME</th>
+                        <th className="py-2 px-3 text-right">NET P&amp;L</th>
+                        <th className="py-2 px-3 text-right">ARCHIVED BAL</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-hairline">
+                      {[...archivedPhase1WithBalance].reverse().map(t => {
+                        const isWin = t.pnl > 0;
+                        const isLoss = t.pnl < 0;
+                        const timeClean = (t.executionTime || '09:30 PM').replace(' PHT', '');
+                        const dateClean = t.tradeDate || '2026-11-11';
+                        const entryDisplay = t.entryPrice && t.entryPrice !== '-' ? ` @ ${t.entryPrice}` : '';
+
+                        return (
+                          <tr key={t.id} className="text-slate-400 border-b border-hairline">
+                            <td className="py-2 px-3 whitespace-nowrap font-bold">
+                              #{String(t.index).padStart(2, '0')}
+                            </td>
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span>{dateClean}</span>
+                              <span className="text-slate-600 mx-1.5">•</span>
+                              <span className="text-slate-500">{timeClean}</span>
+                            </td>
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] font-bold">
+                                PHASE 1
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded bg-slate-800/70 border border-slate-700 text-slate-300 text-[11px]">
+                                {t.position}{entryDisplay}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 whitespace-nowrap text-slate-500">
+                              SL: {t.stopLoss || '-'} | TP: {t.takeProfit || '-'}
+                            </td>
+                            <td className="py-2 px-3 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded bg-slate-800/70 border border-slate-700 text-slate-300">
+                                {t.result}
+                              </span>
+                            </td>
+                            <td className={`py-2 px-3 text-right num-mono whitespace-nowrap ${isWin ? 'text-emerald-400/70' : isLoss ? 'text-rose-400/70' : 'text-slate-500'}`}>
+                              {isWin ? `+₱${t.pnl.toLocaleString()}` : isLoss ? `-₱${Math.abs(t.pnl).toLocaleString()}` : '₱0'}
+                            </td>
+                            <td className="py-2 px-3 text-right num-mono whitespace-nowrap text-slate-400">
+                              ₱{(t.balanceAfter ?? 10000).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Auto-Updating Equity & Goal Trajectory Chart */}
             <div className="glass-card rounded-xl p-4 sm:p-5 border-hairline bg-[#0a0f1d]">
@@ -4176,11 +4612,11 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>
                   <h4 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wide font-mono">
-                    GOAL TRAJECTORY // ₱10,000 MILESTONE
+                    GOAL TRAJECTORY // ₱{milestoneTarget.toLocaleString()} MILESTONE
                   </h4>
                 </div>
                 <div className="text-[11px] font-mono text-slate-400">
-                  Target: <span className="text-amber-400 font-semibold">+₱10,000 Milestone</span>
+                  Target: <span className="text-amber-400 font-semibold">+₱{milestoneTarget.toLocaleString()} Milestone</span>
                 </div>
               </div>
 
@@ -4199,7 +4635,7 @@ export default function App() {
                     ></div>
                   </div>
                   <div className="text-[10px] font-mono text-slate-400 num-mono text-right">
-                    ₱{Math.max(0, netPnL).toLocaleString()} / ₱10,000
+                    ₱{Math.max(0, netPnL).toLocaleString()} / ₱{milestoneTarget.toLocaleString()}
                   </div>
                 </div>
 
@@ -4227,7 +4663,7 @@ export default function App() {
                   <div className="text-base sm:text-lg font-bold font-mono text-amber-400 num-mono mt-0.5">
                     ₱{distanceToTarget.toLocaleString()}
                   </div>
-                  <div className="text-[10px] font-mono text-slate-500 mt-0.5">To +₱10,000 milestone</div>
+                  <div className="text-[10px] font-mono text-slate-500 mt-0.5">To +₱{milestoneTarget.toLocaleString()} milestone</div>
                 </div>
               </div>
 
@@ -4440,8 +4876,11 @@ export default function App() {
                 phase2Completed={p2Completed}
                 phase2Total={p2Total}
                 isPhase2Unlocked={isPhase2Unlocked}
+                currentPhase={activeStudentPhase}
                 netPnL={netPnL}
-                profitGoalTarget={10000}
+                swingWinsCount={phase2SwingWinsCount}
+                profitGoalTarget={milestoneTarget}
+                profitGoalPeriodLabel={selectedPeriodLabel}
                 passedQuizSections={quizProgress.passedSections.length}
                 totalQuizSections={4}
                 onNavigateTab={(tab, phase) => {
@@ -4578,6 +5017,12 @@ export default function App() {
           phase1LessonIds={PHASE_1_LESSONS.map((l) => l.id)}
           phase2LessonIds={PHASE_2_LESSONS.filter((l) => l.duration.toUpperCase() !== 'TBD').map((l) => l.id)}
           isMasterAccountFn={isMasterOrAdminAccount}
+          onCurrentStudentUpdated={(updated) => {
+            if (currentStudent?.id && updated.id === currentStudent.id) {
+              setCurrentStudent(updated);
+              localStorage.setItem(STUDENT_SESSION_KEY, JSON.stringify(updated));
+            }
+          }}
           onToast={showAdminToast}
           onPlaySuccess={playSuccessChime}
           onPlayError={playErrorTone}
@@ -4676,11 +5121,14 @@ export default function App() {
         </div>
       )}
 
+      {/* FLOATING ASK RJS DESK AI MENTOR */}
+      <AskDeskAiWidget onPlayTone={playTone} />
+
       {/* INSTANT TOAST CONFIRMATION */}
       {adminToast && (
         <div
           key={adminToast.id}
-          className={`fixed bottom-5 right-5 z-[80] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all ${
+          className={`fixed bottom-20 right-5 z-[80] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all ${
             adminToast.type === 'success'
               ? 'border-emerald-500/60 text-emerald-300'
               : 'border-rose-500/60 text-rose-300'

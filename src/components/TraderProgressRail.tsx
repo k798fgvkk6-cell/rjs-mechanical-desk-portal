@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, TrendingUp, BookOpen, Layers, Award } from 'lucide-react';
+import { Lock, TrendingUp, BookOpen, Layers, Award, CheckCircle2, Trophy } from 'lucide-react';
 
 interface ProgressRingCardProps {
   title: string;
@@ -8,8 +8,10 @@ interface ProgressRingCardProps {
   strokeColor: string;
   accentTextClass: string;
   icon: React.ReactNode;
+  subNote?: string;
   locked?: boolean;
   lockedLabel?: string;
+  footerContent?: React.ReactNode;
   onClick?: () => void;
 }
 
@@ -20,8 +22,10 @@ const ProgressRingCard: React.FC<ProgressRingCardProps> = ({
   strokeColor,
   accentTextClass,
   icon,
+  subNote,
   locked = false,
   lockedLabel = 'LOCKED — PHASE 2',
+  footerContent,
   onClick
 }) => {
   const clampedPct = Math.min(100, Math.max(0, percentage));
@@ -83,7 +87,14 @@ const ProgressRingCard: React.FC<ProgressRingCardProps> = ({
           <div className={`mt-2 text-[11px] font-mono font-semibold num-mono text-center ${accentTextClass}`}>
             {subtitle}
           </div>
+          {subNote && (
+            <div className="mt-0.5 text-[10px] font-mono text-slate-400 text-center">
+              {subNote}
+            </div>
+          )}
         </div>
+
+        {footerContent}
       </div>
 
       {locked && (
@@ -104,8 +115,11 @@ interface TraderProgressRailProps {
   phase2Completed: number;
   phase2Total: number;
   isPhase2Unlocked: boolean;
+  currentPhase?: 1 | 2;
   netPnL: number;
+  swingWinsCount?: number;
   profitGoalTarget?: number;
+  profitGoalPeriodLabel?: string;
   passedQuizSections: number;
   totalQuizSections?: number;
   onNavigateTab?: (tab: 'defense' | 'vault' | 'audit' | 'quizzes' | 'simulator', phase?: 1 | 2) => void;
@@ -117,19 +131,63 @@ export const TraderProgressRail: React.FC<TraderProgressRailProps> = ({
   phase2Completed,
   phase2Total,
   isPhase2Unlocked,
+  currentPhase = 1,
   netPnL,
-  profitGoalTarget = 10000,
+  swingWinsCount = 0,
+  profitGoalTarget,
+  profitGoalPeriodLabel,
   passedQuizSections,
   totalQuizSections = 4,
   onNavigateTab
 }) => {
+  const effectiveTarget = profitGoalTarget ?? (currentPhase === 2 ? 20000 : 10000);
   const phase1Pct = phase1Total > 0 ? (phase1Completed / phase1Total) * 100 : 0;
   const phase2Pct = isPhase2Unlocked && phase2Total > 0 ? (phase2Completed / phase2Total) * 100 : 0;
-  const profitPct = Math.min(100, Math.max(0, (netPnL / profitGoalTarget) * 100));
+  const profitPct = Math.min(100, Math.max(0, (netPnL / effectiveTarget) * 100));
   const quizPct = totalQuizSections > 0 ? (passedQuizSections / totalQuizSections) * 100 : 0;
 
   const formattedNetPnL =
     netPnL < 0 ? `-₱${Math.abs(netPnL).toLocaleString()}` : `₱${netPnL.toLocaleString()}`;
+
+  const swingTarget = 2;
+  const clampedSwingWins = Math.min(swingTarget, Math.max(0, swingWinsCount));
+
+  const swingMilestoneFooter =
+    currentPhase === 2 ? (
+      <div className="mt-3 pt-2.5 border-t border-hairline space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[9px] font-mono uppercase tracking-wider font-bold text-cyan-400 flex items-center gap-1">
+            <Trophy className="w-3 h-3 shrink-0" />
+            <span>1:4 / 1:5 SWING WINS</span>
+          </span>
+          <span
+            className={`text-[10px] font-mono font-bold num-mono ${
+              clampedSwingWins >= swingTarget ? 'text-emerald-400' : 'text-slate-300'
+            }`}
+          >
+            {swingWinsCount} / {swingTarget} Completed
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {[0, 1].map((idx) => {
+            const done = swingWinsCount > idx;
+            return (
+              <div
+                key={idx}
+                className={`h-6 rounded-md border flex items-center justify-center gap-1 text-[9px] font-mono font-bold transition-all ${
+                  done
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                    : 'bg-[#0e131e] border-hairline text-slate-500'
+                }`}
+              >
+                {done ? <CheckCircle2 className="w-3 h-3" /> : null}
+                <span>WIN #{idx + 1}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    ) : undefined;
 
   return (
     <aside className="w-full lg:w-72 shrink-0 lg:sticky lg:top-[128px]">
@@ -169,16 +227,26 @@ export const TraderProgressRail: React.FC<TraderProgressRailProps> = ({
             onClick={() => onNavigateTab?.('vault', 2)}
           />
 
-          {/* 3. ₱10,000 PROFIT GOAL */}
+          {/* 3. DYNAMIC PHASE 1 / PHASE 2 PROFIT GOAL + SWING MILESTONE */}
           <ProgressRingCard
-            title="₱10,000 PROFIT GOAL"
+            title={currentPhase === 2 ? 'PHASE 2 PROFIT GOAL' : 'PHASE 1 PROFIT GOAL'}
             percentage={profitPct}
-            subtitle={`${formattedNetPnL} / ₱${profitGoalTarget.toLocaleString()}`}
-            strokeColor={profitPct >= 100 ? '#10b981' : '#f59e0b'}
+            subtitle={`${formattedNetPnL} / ₱${effectiveTarget.toLocaleString()}`}
+            subNote={profitGoalPeriodLabel}
+            strokeColor={
+              profitPct >= 100 ? '#10b981' : currentPhase === 2 ? '#06b6d4' : '#f59e0b'
+            }
             accentTextClass={
-              netPnL < 0 ? 'text-rose-400' : profitPct >= 100 ? 'text-emerald-400' : 'text-amber-400'
+              netPnL < 0
+                ? 'text-rose-400'
+                : profitPct >= 100
+                ? 'text-emerald-400'
+                : currentPhase === 2
+                ? 'text-cyan-400'
+                : 'text-amber-400'
             }
             icon={<TrendingUp className="w-3.5 h-3.5" />}
+            footerContent={swingMilestoneFooter}
             onClick={() => onNavigateTab?.('audit')}
           />
 

@@ -10,10 +10,15 @@ import {
   Loader2,
   BookOpen,
   Award,
-  TrendingUp
+  TrendingUp,
+  ArrowUpRight
 } from 'lucide-react';
-import { supabase, StudentSession } from '../lib/supabase';
-import { extractLessonIdsFromCloud, extractQuizProgressFromCloud } from '../data/quizData';
+import { supabase, StudentSession, extractCurrentPhase } from '../lib/supabase';
+import {
+  extractLessonIdsFromCloud,
+  extractQuizProgressFromCloud,
+  mergeCurrentPhaseIntoCloudLessons
+} from '../data/quizData';
 
 interface TradeSummary {
   count: number;
@@ -26,6 +31,7 @@ interface AdminStudentManagerModalProps {
   phase1LessonIds: string[];
   phase2LessonIds: string[];
   isMasterAccountFn: (student?: StudentSession | null) => boolean;
+  onCurrentStudentUpdated?: (updatedStudent: StudentSession) => void;
   onToast: (type: 'success' | 'error', message: string) => void;
   onPlaySuccess: () => void;
   onPlayError: () => void;
@@ -41,6 +47,7 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
   phase1LessonIds,
   phase2LessonIds,
   isMasterAccountFn,
+  onCurrentStudentUpdated,
   onToast,
   onPlaySuccess,
   onPlayError,
@@ -50,6 +57,7 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
   const [tradeSummaryByStudent, setTradeSummaryByStudent] = useState<Record<string, TradeSummary>>({});
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [updatingStudentId, setUpdatingStudentId] = useState<string | null>(null);
+  const [updatingPhaseStudentId, setUpdatingPhaseStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [tierFilter, setTierFilter] = useState<'ALL' | 'PHASE1' | 'PHASE2'>('ALL');
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -72,16 +80,21 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
         throw studentsRes.error;
       }
 
-      const list: StudentSession[] = (studentsRes.data || []).map((s: any) => ({
-        id: s.id,
-        full_name: s.full_name,
-        email: s.email ?? null,
-        tier: s.tier || 'phase1',
-        is_active: s.is_active,
-        unlocked_lessons: Array.isArray(s.unlocked_lessons) ? s.unlocked_lessons : [],
-        passcode: s.passcode,
-        created_at: s.created_at
-      }));
+      const list: StudentSession[] = (studentsRes.data || []).map((s: any) => {
+        const unlocked = Array.isArray(s.unlocked_lessons) ? s.unlocked_lessons : [];
+        return {
+          id: s.id,
+          full_name: s.full_name,
+          email: s.email ?? null,
+          tier: s.tier || 'phase1',
+          currentPhase: extractCurrentPhase(unlocked, s.current_phase),
+          current_phase: s.current_phase ?? null,
+          is_active: s.is_active,
+          unlocked_lessons: unlocked,
+          passcode: s.passcode,
+          created_at: s.created_at
+        };
+      });
       setStudents(list);
 
       const summaryMap: Record<string, TradeSummary> = {};
@@ -117,6 +130,9 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
     return t === 'phase2' || t === 'pro' || isMasterAccountFn(student);
   };
 
+  const getStudentCurrentPhase = (student: StudentSession): 1 | 2 =>
+    student.currentPhase ?? extractCurrentPhase(student.unlocked_lessons, student.current_phase);
+
   const handleToggleStudentTier = async (student: StudentSession) => {
     if (isMasterAccountFn(student) || updatingStudentId) return;
 
@@ -136,13 +152,13 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
 
       if (error) throw error;
 
-      setStudents((prev) =>
-        prev.map((row) =>
-          row.id === student.id
-            ? { ...row, tier: updated?.tier || nextTier }
-            : row
-        )
-      );
+      const nextRow: StudentSession = {
+        ...student,
+        tier: updated?.tier || nextTier
+      };
+
+      setStudents((prev) => prev.map((row) => (row.id === student.id ? nextRow : row)));
+      onCurrentStudentUpdated?.(nextRow);
 
       onPlaySuccess();
       onToast(
@@ -160,6 +176,77 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
       );
     } finally {
       setUpdatingStudentId(null);
+    }
+  };
+
+  const handleSetStudentCurrentPhase = async (student: StudentSession, targetPhase?: 1 | 2) => {
+    if (updatingPhaseStudentId) return;
+    const currentPhase = getStudentCurrentPhase(student);
+    const nextPhase: 1 | 2 = targetPhase ?? (currentPhase === 2 ? 1 : 2);
+    if (nextPhase === currentPhase) return;
+
+    const nextUnlocked = mergeCurrentPhaseIntoCloudLessons(student.unlocked_lessons, nextPhase);
+
+    setUpdatingPhaseStudentId(student.id);
+    onPlayTone(660, 'sine', 0.04);
+
+    try {
+      let updatedRow: any = null;
+      const firstAttempt = await supabase
+        .from('students')
+        .update({ unlocked_lessons: nextUnlocked, current_phase: nextPhase })
+        .eq('id', student.id)
+        .select('*')
+        .maybeSingle();
+
+      if (firstAttempt.error) {
+        const msg = String(firstAttempt.error.message || '').toLowerCase();
+        if (msg.includes('current_phase') || firstAttempt.error.code === '42703' || firstAttempt.error.code === 'PGRST204') {
+          const fallbackAttempt = await supabase
+            .from('students')
+            .update({ unlocked_lessons: nextUnlocked })
+            .eq('id', student.id)
+            .select('*')
+            .maybeSingle();
+          if (fallbackAttempt.error) throw fallbackAttempt.error;
+          updatedRow = fallbackAttempt.data;
+        } else {
+          throw firstAttempt.error;
+        }
+      } else {
+        updatedRow = firstAttempt.data;
+      }
+
+      const finalUnlocked = Array.isArray(updatedRow?.unlocked_lessons)
+        ? updatedRow.unlocked_lessons
+        : nextUnlocked;
+
+      const nextStudent: StudentSession = {
+        ...student,
+        unlocked_lessons: finalUnlocked,
+        current_phase: updatedRow?.current_phase ?? nextPhase,
+        currentPhase: extractCurrentPhase(finalUnlocked, updatedRow?.current_phase ?? nextPhase)
+      };
+
+      setStudents((prev) => prev.map((row) => (row.id === student.id ? nextStudent : row)));
+      onCurrentStudentUpdated?.(nextStudent);
+
+      onPlaySuccess();
+      onToast(
+        'success',
+        nextPhase === 2
+          ? `${student.full_name} promoted to PHASE 2 — Goal switched to ₱20,000 + Swing Wins tracker; Phase 1 logs archived.`
+          : `${student.full_name} switched to PHASE 1 — Goal set to ₱10,000.`
+      );
+    } catch (err: any) {
+      console.error('Supabase currentPhase update error:', err);
+      onPlayError();
+      onToast(
+        'error',
+        `Failed to update Phase for ${student.full_name}: ${err?.message || 'Database error'}`
+      );
+    } finally {
+      setUpdatingPhaseStudentId(null);
     }
   };
 
@@ -205,7 +292,7 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
                 </span>
               </div>
               <p className="text-xs font-mono text-slate-400 mt-0.5">
-                Live Supabase roster · Flip any student between PHASE 1 and PHASE 2 SETTLED to sync access across all devices.
+                Live Supabase roster · Toggle Phase 2 access or promote any student&apos;s active trading logbook between Phase 1 (₱10k) and Phase 2 (₱20k).
               </p>
             </div>
           </div>
@@ -302,7 +389,9 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
             filteredStudents.map((student) => {
               const isMaster = isMasterAccountFn(student);
               const settled = isSettledPhase2(student);
+              const activePhase = getStudentCurrentPhase(student);
               const isUpdating = updatingStudentId === student.id;
+              const isUpdatingPhase = updatingPhaseStudentId === student.id;
 
               const lessonIds = extractLessonIdsFromCloud(student.unlocked_lessons);
               const p1Done = phase1LessonIds.filter((id) =>
@@ -326,7 +415,7 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
               return (
                 <div
                   key={student.id}
-                  className="p-3.5 sm:p-4 rounded-xl bg-[#070a12] border border-hairline flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all"
+                  className="p-3.5 sm:p-4 rounded-xl bg-[#070a12] border border-hairline flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all"
                 >
                   {/* Student Name / Email & Progress */}
                   <div className="space-y-2 min-w-0 flex-1">
@@ -376,58 +465,95 @@ export const AdminStudentManagerModal: React.FC<AdminStudentManagerModalProps> =
                     </div>
                   </div>
 
-                  {/* Status Badge & One-Click Phase 1 <-> Phase 2 Toggle Switch */}
-                  <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-hairline">
-                    {isMaster ? (
-                      <>
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold">
-                          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                          <span>MASTER ADMIN</span>
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          FULL ACCESS
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        {settled ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-mono text-[11px] font-bold">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>PHASE 2 SETTLED</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 font-mono text-[11px] font-bold">
-                            <Lock className="w-3.5 h-3.5 text-amber-400" />
-                            <span>PHASE 1</span>
-                          </span>
-                        )}
-
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-slate-400 uppercase hidden sm:inline">
-                            {isUpdating ? 'SAVING...' : settled ? 'PHASE 2' : 'PHASE 1'}
-                          </span>
+                  {/* Phase Promotion + Access Controls */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between lg:justify-end gap-2.5 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-hairline">
+                    {/* Logbook Phase Promotion Control (currentPhase 1 vs 2) */}
+                    <div className="flex items-center gap-1.5">
+                      {activePhase === 1 ? (
+                        <button
+                          type="button"
+                          disabled={isUpdatingPhase}
+                          onClick={() => handleSetStudentCurrentPhase(student, 2)}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold tracking-wider flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+                          title="Promote student's trading logbook & profit goal to Phase 2 (₱20,000)"
+                        >
+                          {isUpdatingPhase ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <ArrowUpRight className="w-3 h-3" />
+                          )}
+                          <span>PROMOTE TO PHASE 2</span>
+                        </button>
+                      ) : (
+                        <div className="inline-flex items-center rounded-lg bg-[#0e131e] border border-cyan-500/40 p-0.5 font-mono text-[10px]">
                           <button
                             type="button"
-                            role="switch"
-                            aria-checked={settled}
-                            aria-label={`Toggle Phase 2 access for ${student.full_name}`}
-                            disabled={isUpdating}
-                            onClick={() => handleToggleStudentTier(student)}
-                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${
-                              settled
-                                ? 'bg-emerald-600 border-emerald-400'
-                                : 'bg-slate-800 border-slate-600'
-                            }`}
+                            disabled={isUpdatingPhase}
+                            onClick={() => handleSetStudentCurrentPhase(student, 1)}
+                            className="px-2 py-0.5 rounded text-slate-400 hover:text-white font-bold transition-colors cursor-pointer disabled:opacity-50"
+                            title="Switch logbook back to Phase 1"
                           >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                                settled ? 'translate-x-6' : 'translate-x-1'
-                              }`}
-                            />
+                            PHASE 1
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isUpdatingPhase}
+                            onClick={() => handleSetStudentCurrentPhase(student, 2)}
+                            className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/45 text-cyan-300 font-bold cursor-default"
+                          >
+                            {isUpdatingPhase ? '...' : 'PHASE 2'}
                           </button>
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
+
+                    {/* Tier Access Switch */}
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5">
+                      {isMaster ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold">
+                            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                            <span>MASTER ADMIN</span>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          {settled ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-mono text-[11px] font-bold">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>PHASE 2 SETTLED</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 font-mono text-[11px] font-bold">
+                              <Lock className="w-3.5 h-3.5 text-amber-400" />
+                              <span>PHASE 1</span>
+                            </span>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={settled}
+                              aria-label={`Toggle Phase 2 access for ${student.full_name}`}
+                              disabled={isUpdating}
+                              onClick={() => handleToggleStudentTier(student)}
+                              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${
+                                settled
+                                  ? 'bg-emerald-600 border-emerald-400'
+                                  : 'bg-slate-800 border-slate-600'
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                  settled ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

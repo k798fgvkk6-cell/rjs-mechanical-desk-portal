@@ -230,10 +230,16 @@ html.bright-mode body,
   color: #b45309 !important;
 }
 
-/* Keep solid CTA buttons crisp */
+/* Keep solid CTA buttons & user chat bubbles crisp */
 .bright-mode button.bg-emerald-600,
-.bright-mode button[class*="bg-emerald-600"] {
+.bright-mode button[class*="bg-emerald-600"],
+.bright-mode [class*="bg-emerald-600"] {
   background-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.bright-mode [class*="bg-emerald-600"] .text-white,
+.bright-mode [class*="bg-emerald-600"] span {
   color: #ffffff !important;
 }
 

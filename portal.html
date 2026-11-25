@@ -327,8 +327,14 @@
     }
 
     .bright-mode button.bg-emerald-600,
-    .bright-mode button[class*="bg-emerald-600"] {
+    .bright-mode button[class*="bg-emerald-600"],
+    .bright-mode [class*="bg-emerald-600"] {
       background-color: #10b981 !important;
+      color: #ffffff !important;
+    }
+
+    .bright-mode [class*="bg-emerald-600"] .text-white,
+    .bright-mode [class*="bg-emerald-600"] span {
       color: #ffffff !important;
     }
 
@@ -605,7 +611,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
             </svg>
             <span>TRADING LOGS</span>
-            <span id="auditProgressPill" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">0/20</span>
+            <span id="auditProgressPill" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">0 LOGS</span>
           </button>
 
           <button 
@@ -1126,7 +1132,57 @@
       <!-- TAB 3: EXECUTION AUDIT LOGGER                                  -->
       <!-- ============================================================== -->
       <section id="workspace-audit" class="hidden space-y-6">
-        
+
+        <!-- MONTH / YEAR FILTER BAR -->
+        <div class="glass-card rounded-xl px-4 py-3 border-hairline flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <div class="text-xs font-mono font-bold uppercase tracking-wider text-white flex items-center gap-2 flex-wrap">
+                <span>Month / Year Filter</span>
+                <span id="auditActivePhaseBadge" class="px-2 py-0.5 rounded text-[10px] font-bold border bg-emerald-500/15 border-emerald-500/40 text-emerald-300">PHASE 1 ACTIVE</span>
+              </div>
+              <div id="auditPeriodSummary" class="text-[11px] font-mono text-slate-400">
+                Showing November 2026 · 0 Phase 1 trades (0 in Phase 1)
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto font-mono text-xs">
+            <select
+              id="auditPeriodSelect"
+              onchange="setAuditPeriodFilter(this.value)"
+              aria-label="Filter trading logs by Month and Year"
+              class="bg-[#0a0d15] border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer flex-1 sm:flex-initial"
+            ></select>
+
+            <button
+              type="button"
+              id="btnAuditPeriodAllTime"
+              onclick="toggleAuditAllTimeFilter()"
+              class="px-3 py-1.5 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 hover:text-white hover:border-slate-500 font-semibold transition-all cursor-pointer whitespace-nowrap"
+            >
+              All Time
+            </button>
+
+            <button
+              type="button"
+              id="btnAiTradeReview"
+              onclick="runAiTradeReview()"
+              class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shadow-[0_0_16px_rgba(16,185,129,0.28)]"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+              </svg>
+              <span id="btnAiTradeReviewLabel">AI DESK PERFORMANCE REVIEW</span>
+            </button>
+          </div>
+        </div>
+
         <!-- TOP STATS METRIC RIBBON -->
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
           
@@ -1155,17 +1211,12 @@
           </div>
 
           <div class="glass-card rounded-xl p-4 border-emerald-500/30 col-span-2 md:col-span-1 bg-emerald-950/10">
-            <div class="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-semibold flex justify-between">
-              <span>Audit Block</span>
-              <span id="statProgressRatio" class="num-mono">0 / 20</span>
+            <div class="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-semibold flex justify-between items-center gap-2">
+              <span>Total Trades</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">UNLIMITED</span>
             </div>
-            <div class="w-full bg-slate-800 rounded-full h-2 mt-2.5 overflow-hidden">
-              <div id="auditProgressBar" class="bg-emerald-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
-            </div>
-            <div class="text-[10px] text-slate-400 font-mono mt-1.5 flex justify-between">
-              <span>Sample Size Gate</span>
-              <span id="statAuditPercent" class="text-emerald-400">0%</span>
-            </div>
+            <div id="statTotalTrades" class="text-xl font-bold font-mono text-white num-mono mt-1">0 Trades</div>
+            <div id="statTotalTradesPeriod" class="text-[10px] text-slate-400 font-mono mt-0.5 truncate">November 2026</div>
           </div>
 
         </div>
@@ -1332,20 +1383,33 @@
 
         </div>
 
+        <!-- AI TRADE LOGBOOK LEAK & TILT COACHING REPORT -->
+        <div id="aiTradeReviewCard" class="hidden"></div>
+
         <!-- STREAMLINED AUDIT JOURNAL DATA TABLE -->
         <div class="glass-card rounded-xl p-4 sm:p-5 border-hairline">
           
           <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-hairline mb-3 gap-3">
             <div>
-              <h4 class="text-sm font-bold text-white uppercase tracking-wide">Audit Execution Journal</h4>
-              <p class="text-[11px] font-mono text-slate-400 mt-0.5">Real-time mechanical trading log</p>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h4 id="auditTableHeaderTitle" class="text-sm font-bold text-white uppercase tracking-wide">PHASE 1 TRADES // AUDIT EXECUTION JOURNAL</h4>
+                <span id="auditTablePhaseBadge" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border bg-emerald-500/15 border-emerald-500/40 text-emerald-300">PHASE 1</span>
+              </div>
+              <p id="auditTableSubtitle" class="text-[11px] font-mono text-slate-400 mt-0.5">Real-time mechanical trading log</p>
             </div>
 
-            <!-- Table Controls: Filter, Export, Reset -->
+            <!-- Table Controls: Period, Filter, Export, Reset -->
             <div class="flex items-center flex-wrap gap-2 text-xs font-mono">
+              <select
+                id="auditTablePeriodSelect"
+                onchange="setAuditPeriodFilter(this.value)"
+                aria-label="Journal Month and Year Filter"
+                class="bg-[#0a0d15] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              ></select>
+
               <select 
                 id="auditTableFilter" 
-                onchange="renderAuditTable()" 
+                onchange="auditTablePage = 1; renderAuditTable()" 
                 class="bg-[#0a0d15] border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none cursor-pointer"
               >
                 <option value="ALL">All Outcomes</option>
@@ -1408,23 +1472,29 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
               </svg>
             </div>
-            <p class="text-sm text-slate-400 font-medium">No audit trades committed yet.</p>
-            <p class="text-xs text-slate-500 mt-1 font-mono">Execute your setup during NY Cash Open and record your first trade.</p>
+            <p id="auditEmptyTitle" class="text-sm text-slate-400 font-medium">No audit trades committed yet.</p>
+            <p id="auditEmptySubtitle" class="text-xs text-slate-500 mt-1 font-mono">Execute your setup during NY Cash Open and record your first trade.</p>
           </div>
 
+          <!-- Pagination Controls (when > 25 trades) -->
+          <div id="auditTablePaginationBar" class="hidden mt-3 pt-3 border-t border-hairline flex flex-wrap items-center justify-between gap-2 text-xs font-mono"></div>
+
         </div>
+
+        <!-- SEPARATED & MUTED PHASE 1 ARCHIVE (VISIBLE WHEN PROMOTED TO PHASE 2) -->
+        <div id="phase1ArchivedTradesSection" class="hidden glass-card rounded-xl p-4 sm:p-5 border-hairline opacity-75"></div>
 
         <!-- AUTO-UPDATING EQUITY & GOAL TRAJECTORY CHART -->
         <div class="glass-card rounded-xl p-4 sm:p-5 border-hairline bg-[#0a0f1d]">
           <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-hairline mb-4 gap-2">
             <div class="flex items-center gap-2">
               <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>
-              <h4 class="text-xs sm:text-sm font-bold text-white uppercase tracking-wide font-mono">
+              <h4 id="trajectoryTitleHeading" class="text-xs sm:text-sm font-bold text-white uppercase tracking-wide font-mono">
                 GOAL TRAJECTORY // ₱10,000 MILESTONE
               </h4>
             </div>
             <div class="text-[11px] font-mono text-slate-400">
-              Target: <span class="text-amber-400 font-semibold">+₱10,000 Milestone</span>
+              Target: <span id="trajectoryTargetBadge" class="text-amber-400 font-semibold">+₱10,000 Milestone</span>
             </div>
           </div>
 
@@ -1472,7 +1542,7 @@
               <div id="trajectoryDistanceToTarget" class="text-base sm:text-lg font-bold font-mono text-amber-400 num-mono mt-0.5">
                 ₱10,000
               </div>
-              <div class="text-[10px] font-mono text-slate-500 mt-0.5">To +₱10,000 milestone</div>
+              <div id="trajectoryDistanceSubtext" class="text-[10px] font-mono text-slate-500 mt-0.5">To +₱10,000 milestone</div>
             </div>
           </div>
 
@@ -1572,6 +1642,89 @@
         </div>
       </div>
     </footer>
+
+    <!-- FLOATING ASK RJS DESK AI MENTOR -->
+    <div id="askDeskAiWidget" class="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
+      <div id="askDeskAiDrawer" class="hidden glass-card w-[calc(100vw-2rem)] sm:w-[410px] h-[520px] max-h-[78vh] rounded-2xl border border-emerald-500/35 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden">
+        <div class="px-4 py-3 border-b border-hairline flex items-center justify-between gap-2 bg-[#0a0f1d]/90 shrink-0">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/35 flex items-center justify-center text-emerald-400 shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+              </svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-mono font-bold uppercase tracking-wider text-white">ASK RJS DESK AI</span>
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <div class="text-[10px] font-mono text-slate-400">USTECH100 Mechanical Playbook Mentor</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              id="btnClearDeskAi"
+              onclick="clearAskDeskAiChat()"
+              class="hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors cursor-pointer"
+              title="Clear conversation"
+              aria-label="Clear conversation"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              onclick="toggleAskDeskAi(false)"
+              class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors cursor-pointer"
+              title="Close RJS Desk AI"
+              aria-label="Close RJS Desk AI"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="askDeskAiMessages" class="flex-1 overflow-y-auto p-3.5 space-y-3"></div>
+
+        <div id="askDeskAiQuickStrip" class="hidden px-3 py-1.5 border-t border-hairline bg-[#070a12] flex items-center gap-1.5 overflow-x-auto shrink-0"></div>
+
+        <form onsubmit="submitDeskAiForm(event)" class="p-3 border-t border-hairline bg-[#0a0f1d]/90 flex items-center gap-2 shrink-0">
+          <input
+            id="askDeskAiInput"
+            type="text"
+            placeholder="Ask about RJS USTECH100 rules..."
+            class="flex-1 bg-[#070a12] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+          />
+          <button
+            id="askDeskAiSendBtn"
+            type="submit"
+            class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-mono text-xs font-bold flex items-center justify-center transition-all cursor-pointer shrink-0"
+            aria-label="Send message to RJS Desk AI"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      <button
+        type="button"
+        onclick="toggleAskDeskAi()"
+        class="glass-card px-4 py-2.5 rounded-full border border-emerald-500/45 shadow-[0_10px_30px_-8px_rgba(16,185,129,0.4)] hover:border-emerald-400 text-xs font-mono font-bold tracking-wider text-white flex items-center gap-2 transition-all hover:scale-[1.03] active:scale-[0.98] cursor-pointer"
+        aria-label="Open Ask RJS Desk AI Mentor"
+      >
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+        </svg>
+        <span>ASK RJS DESK AI</span>
+      </button>
+    </div>
 
   </div>
 
@@ -1821,7 +1974,7 @@
   </div>
 
   <!-- FLOATING TOAST CONFIRMATION -->
-  <div id="adminToastBanner" class="hidden fixed bottom-5 right-5 z-[80] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all"></div>
+  <div id="adminToastBanner" class="hidden fixed bottom-20 right-5 z-[80] max-w-md glass-card px-4 py-3 rounded-xl border shadow-2xl font-mono text-xs font-semibold flex items-center gap-2.5 transition-all"></div>
 
   <!-- ============================================================== -->
   <!-- JAVASCRIPT TERMINAL LOGIC & PERSISTENCE                        -->
@@ -1983,6 +2136,62 @@
       }
     }
 
+    function extractCurrentPhase(unlockedLessons, explicitCurrentPhase) {
+      const num = Number(explicitCurrentPhase);
+      if (num === 2) return 2;
+      if (num === 1) return 1;
+      if (Array.isArray(unlockedLessons)) {
+        if (unlockedLessons.includes('phase_current_2')) return 2;
+        if (unlockedLessons.includes('phase_current_1')) return 1;
+      }
+      return 1;
+    }
+
+    function mergeCurrentPhaseIntoCloudLessons(unlockedLessons, targetPhase) {
+      const base = Array.isArray(unlockedLessons)
+        ? unlockedLessons.filter((item) => typeof item === 'string' && !item.startsWith('phase_current_'))
+        : [];
+      return [...base, `phase_current_${targetPhase === 2 ? 2 : 1}`];
+    }
+
+    function getActiveStudentPhase() {
+      if (!currentStudentSession) return 1;
+      return extractCurrentPhase(currentStudentSession.unlocked_lessons, currentStudentSession.currentPhase ?? currentStudentSession.current_phase);
+    }
+
+    function encodeTradePhaseNote(phase, cleanNote) {
+      const trimmed = String(cleanNote || '').replace(/^\[(PHASE1|PHASE2)\]\s*/i, '').trim();
+      if (phase === 2) {
+        return trimmed ? `[PHASE2] ${trimmed}` : '[PHASE2]';
+      }
+      return trimmed || null;
+    }
+
+    function decodeTradePhaseAndNote(rawNotes, explicitPhase) {
+      const raw = typeof rawNotes === 'string' ? rawNotes : '';
+      let phase = Number(explicitPhase) === 2 ? 2 : 1;
+      let note = raw;
+      if (/^\[PHASE2\]/i.test(raw)) {
+        phase = 2;
+        note = raw.replace(/^\[PHASE2\]\s*/i, '');
+      } else if (/^\[PHASE1\]/i.test(raw)) {
+        if (Number(explicitPhase) !== 2) phase = 1;
+        note = raw.replace(/^\[PHASE1\]\s*/i, '');
+      }
+      return { phase, note: note.trim() };
+    }
+
+    function extractRrrMultiple(rrr) {
+      const m = /1:(\d+(?:\.\d+)?)/.exec(String(rrr || ''));
+      return m ? Number(m[1]) || 0 : 0;
+    }
+
+    function isPhase2SwingWin(trade) {
+      if (!trade || (trade.phase || 1) !== 2) return false;
+      if (!((trade.pnl || 0) > 0)) return false;
+      return trade.pnl >= 4000 || extractRrrMultiple(trade.rrr) >= 4;
+    }
+
     function applyRefreshedStudentSession(freshStudent) {
       if (!freshStudent) return;
       if (freshStudent.is_active === false) {
@@ -1990,13 +2199,16 @@
         return;
       }
 
+      const unlockedRaw = Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [];
       const refreshed = {
         id: freshStudent.id,
         full_name: freshStudent.full_name,
         email: freshStudent.email ?? null,
         tier: freshStudent.tier || 'phase1',
+        current_phase: freshStudent.current_phase ?? null,
+        currentPhase: extractCurrentPhase(unlockedRaw, freshStudent.current_phase),
         is_active: freshStudent.is_active,
-        unlocked_lessons: Array.isArray(freshStudent.unlocked_lessons) ? freshStudent.unlocked_lessons : [],
+        unlocked_lessons: unlockedRaw,
         passcode: freshStudent.passcode,
         created_at: freshStudent.created_at
       };
@@ -2022,6 +2234,8 @@
       if (typeof renderLessonAssignmentPanel === 'function') renderLessonAssignmentPanel();
       if (typeof renderQuizzesTab === 'function') renderQuizzesTab();
       if (typeof renderSimulatorTab === 'function') renderSimulatorTab();
+      if (typeof renderAuditTable === 'function') renderAuditTable();
+      if (typeof updateAuditStats === 'function') updateAuditStats();
       if (typeof renderTraderProgressRail === 'function') renderTraderProgressRail();
     }
 
@@ -2171,6 +2385,7 @@
       }
 
       if (isAuth && savedSession && savedSession.id) {
+        savedSession.currentPhase = extractCurrentPhase(savedSession.unlocked_lessons, savedSession.currentPhase ?? savedSession.current_phase);
         currentStudentSession = savedSession;
         updateStudentHeaderUI(savedSession);
 
@@ -2225,13 +2440,16 @@
           throw new Error('INVALID_KEY');
         }
 
+        const unlockedRaw = Array.isArray(student.unlocked_lessons) ? student.unlocked_lessons : [];
         const sessionData = {
           id: student.id,
           full_name: student.full_name,
           email: student.email ?? null,
           tier: student.tier || 'phase1',
+          current_phase: student.current_phase ?? null,
+          currentPhase: extractCurrentPhase(unlockedRaw, student.current_phase),
           is_active: student.is_active,
-          unlocked_lessons: Array.isArray(student.unlocked_lessons) ? student.unlocked_lessons : [],
+          unlocked_lessons: unlockedRaw,
           passcode: student.passcode,
           created_at: student.created_at
         };
@@ -2328,6 +2546,9 @@
       updateAuditStats();
       renderCurriculumList();
       updateKeywordsCounter();
+      if (typeof dismissAiTradeReview === 'function') dismissAiTradeReview();
+      if (typeof clearAskDeskAiChat === 'function') clearAskDeskAiChat();
+      if (typeof toggleAskDeskAi === 'function') toggleAskDeskAi(false);
       playTone(400, 'sine', 0.08);
       checkAuthSession();
     }
@@ -2426,16 +2647,21 @@
 
         if (studentsRes.error) throw studentsRes.error;
 
-        adminRosterStudents = (studentsRes.data || []).map((s) => ({
-          id: s.id,
-          full_name: s.full_name,
-          email: s.email ?? null,
-          tier: s.tier || 'phase1',
-          is_active: s.is_active,
-          unlocked_lessons: Array.isArray(s.unlocked_lessons) ? s.unlocked_lessons : [],
-          passcode: s.passcode,
-          created_at: s.created_at
-        }));
+        adminRosterStudents = (studentsRes.data || []).map((s) => {
+          const unlockedRaw = Array.isArray(s.unlocked_lessons) ? s.unlocked_lessons : [];
+          return {
+            id: s.id,
+            full_name: s.full_name,
+            email: s.email ?? null,
+            tier: s.tier || 'phase1',
+            current_phase: s.current_phase ?? null,
+            currentPhase: extractCurrentPhase(unlockedRaw, s.current_phase),
+            is_active: s.is_active,
+            unlocked_lessons: unlockedRaw,
+            passcode: s.passcode,
+            created_at: s.created_at
+          };
+        });
 
         const summaryMap = {};
         if (!tradesRes.error && Array.isArray(tradesRes.data)) {
@@ -2505,6 +2731,101 @@
       }
     }
 
+    async function setAdminStudentCurrentPhase(studentId, targetPhase) {
+      if (!supabaseClient || !isMasterOrAdminAccount(currentStudentSession) || adminUpdatingStudentId) return;
+      const student = adminRosterStudents.find((s) => s.id === studentId);
+      if (!student) return;
+
+      const currentActive = extractCurrentPhase(student.unlocked_lessons, student.currentPhase ?? student.current_phase);
+      if (currentActive === targetPhase) return;
+
+      const nextUnlocked = mergeCurrentPhaseIntoCloudLessons(student.unlocked_lessons, targetPhase);
+      adminUpdatingStudentId = studentId;
+      playTone(620, 'sine', 0.04);
+      renderAdminStudentRoster();
+
+      try {
+        let updatedRow = null;
+        const payload = {
+          unlocked_lessons: nextUnlocked,
+          current_phase: targetPhase
+        };
+        if (targetPhase === 2 && !isAdminStudentSettledPhase2(student) && !isMasterOrAdminAccount(student)) {
+          payload.tier = 'phase2';
+        }
+
+        const primaryRes = await supabaseClient
+          .from('students')
+          .update(payload)
+          .eq('id', studentId)
+          .select('*')
+          .maybeSingle();
+
+        if (primaryRes.error) {
+          const msg = String(primaryRes.error.message || '').toLowerCase();
+          if (msg.includes('current_phase') || primaryRes.error.code === '42703' || primaryRes.error.code === 'PGRST204') {
+            const fallbackPayload = { unlocked_lessons: nextUnlocked };
+            if (payload.tier) fallbackPayload.tier = payload.tier;
+            const fallbackRes = await supabaseClient
+              .from('students')
+              .update(fallbackPayload)
+              .eq('id', studentId)
+              .select('*')
+              .maybeSingle();
+            if (fallbackRes.error) throw fallbackRes.error;
+            updatedRow = fallbackRes.data;
+          } else {
+            throw primaryRes.error;
+          }
+        } else {
+          updatedRow = primaryRes.data;
+        }
+
+        const finalUnlocked = Array.isArray(updatedRow?.unlocked_lessons) ? updatedRow.unlocked_lessons : nextUnlocked;
+        const finalTier = updatedRow?.tier || payload.tier || student.tier;
+        const finalPhase = extractCurrentPhase(finalUnlocked, updatedRow?.current_phase ?? targetPhase);
+
+        adminRosterStudents = adminRosterStudents.map((row) =>
+          row.id === studentId
+            ? {
+                ...row,
+                tier: finalTier,
+                unlocked_lessons: finalUnlocked,
+                current_phase: updatedRow?.current_phase ?? targetPhase,
+                currentPhase: finalPhase
+              }
+            : row
+        );
+
+        if (currentStudentSession?.id === studentId) {
+          applyRefreshedStudentSession({
+            ...currentStudentSession,
+            tier: finalTier,
+            unlocked_lessons: finalUnlocked,
+            current_phase: targetPhase
+          });
+        }
+
+        playSuccessChime();
+        showAdminToast(
+          'success',
+          targetPhase === 2
+            ? `${student.full_name} promoted to PHASE 2 — ₱20,000 goal & 1:4/1:5 swing milestone active.`
+            : `${student.full_name} set to active PHASE 1 — ₱10,000 goal active.`
+        );
+      } catch (err) {
+        console.error('Supabase phase promotion error:', err);
+        playErrorTone();
+        showAdminToast(
+          'error',
+          `Failed to update active phase for ${student.full_name}: ${err?.message || 'Database error'}`
+        );
+      } finally {
+        adminUpdatingStudentId = null;
+        renderAdminStudentRoster();
+      }
+    }
+
     function renderAdminStudentRoster() {
       const container = document.getElementById('adminStudentsRosterBody');
       if (!container) return;
@@ -2563,6 +2884,7 @@
       html += filtered.map((student) => {
         const isMaster = isMasterOrAdminAccount(student);
         const settled = isAdminStudentSettledPhase2(student);
+        const studentActivePhase = extractCurrentPhase(student.unlocked_lessons, student.currentPhase ?? student.current_phase);
         const isUpdating = adminUpdatingStudentId === student.id;
 
         const lessonIds = extractLessonIdsFromCloud(student.unlocked_lessons);
@@ -2580,13 +2902,48 @@
         const pnlAbs = Math.abs(Math.round(tradeStats.netPnL)).toLocaleString();
         const pnlColor = tradeStats.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
+        const sidEsc = escapeQuizHtml(student.id);
+
+        const promotionControlsHtml = `
+          <div class="flex items-center gap-1.5 flex-wrap">
+            ${studentActivePhase === 1 ? `
+              <button
+                type="button"
+                ${isUpdating ? 'disabled' : ''}
+                onclick="setAdminStudentCurrentPhase('${sidEsc}', 2)"
+                class="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/45 text-cyan-300 font-mono text-[10px] font-bold tracking-wider transition-all cursor-pointer disabled:opacity-50"
+              >
+                ${isUpdating ? 'UPDATING...' : 'PROMOTE TO PHASE 2'}
+              </button>
+            ` : ''}
+            <div class="inline-flex items-center p-0.5 rounded-lg bg-[#0e131e] border border-hairline font-mono text-[10px] font-bold">
+              <button
+                type="button"
+                ${isUpdating ? 'disabled' : ''}
+                onclick="setAdminStudentCurrentPhase('${sidEsc}', 1)"
+                class="px-2 py-0.5 rounded transition-all cursor-pointer disabled:opacity-50 ${studentActivePhase === 1 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'text-slate-400 hover:text-white border border-transparent'}"
+              >
+                PHASE 1
+              </button>
+              <button
+                type="button"
+                ${isUpdating ? 'disabled' : ''}
+                onclick="setAdminStudentCurrentPhase('${sidEsc}', 2)"
+                class="px-2 py-0.5 rounded transition-all cursor-pointer disabled:opacity-50 ${studentActivePhase === 2 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-400 hover:text-white border border-transparent'}"
+              >
+                PHASE 2
+              </button>
+            </div>
+          </div>
+        `;
+
         const rightControlsHtml = isMaster
           ? `
             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold">
               <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
               <span>MASTER ADMIN</span>
             </span>
-            <span class="text-[10px] font-mono text-slate-400">FULL ACCESS</span>
+            ${promotionControlsHtml}
           `
           : `
             ${settled
@@ -2601,7 +2958,7 @@
             }
             <div class="flex items-center gap-2">
               <span class="text-[10px] font-mono text-slate-400 uppercase hidden sm:inline">
-                ${isUpdating ? 'SAVING...' : settled ? 'PHASE 2' : 'PHASE 1'}
+                ${isUpdating ? 'SAVING...' : settled ? 'UNLOCKED' : 'LOCKED'}
               </span>
               <button
                 type="button"
@@ -2609,20 +2966,24 @@
                 aria-checked="${settled ? 'true' : 'false'}"
                 aria-label="Toggle Phase 2 access for ${escapeQuizHtml(student.full_name || 'student')}"
                 ${isUpdating ? 'disabled' : ''}
-                onclick="toggleAdminStudentTier('${escapeQuizHtml(student.id)}')"
+                onclick="toggleAdminStudentTier('${sidEsc}')"
                 class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus:outline-none cursor-pointer disabled:opacity-50 ${settled ? 'bg-emerald-600 border-emerald-400' : 'bg-slate-800 border-slate-600'}"
               >
                 <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${settled ? 'translate-x-6' : 'translate-x-1'}"></span>
               </button>
             </div>
+            ${promotionControlsHtml}
           `;
 
         return `
-          <div class="p-3.5 sm:p-4 rounded-xl bg-[#070a12] border border-hairline flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
+          <div class="p-3.5 sm:p-4 rounded-xl bg-[#070a12] border border-hairline flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all">
             <div class="space-y-2 min-w-0 flex-1">
               <div class="flex items-center flex-wrap gap-2">
                 <span class="w-2 h-2 rounded-full shrink-0 ${student.is_active ? 'bg-emerald-400' : 'bg-rose-400'}" title="${student.is_active ? 'Active Account' : 'Inactive Account'}"></span>
                 <span class="text-sm font-bold text-white truncate">${escapeQuizHtml(student.full_name)}</span>
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${studentActivePhase === 2 ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300' : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'}">
+                  GOAL: ${studentActivePhase === 2 ? 'PHASE 2 (₱20k)' : 'PHASE 1 (₱10k)'}
+                </span>
                 <span class="text-[11px] font-mono text-slate-400 truncate">${escapeQuizHtml(subMeta)}</span>
                 ${!student.is_active ? `<span class="px-1.5 py-0.5 rounded bg-rose-950/80 border border-rose-500/40 text-rose-400 font-mono text-[10px] font-bold">INACTIVE</span>` : ''}
               </div>
@@ -2641,7 +3002,7 @@
                 </span>
               </div>
             </div>
-            <div class="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-hairline">
+            <div class="flex items-center flex-wrap justify-between lg:justify-end gap-2.5 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-hairline">
               ${rightControlsHtml}
             </div>
           </div>
@@ -5545,50 +5906,63 @@
     async function loadStudentTradesFromSupabase(studentId) {
       if (!supabaseClient || !studentId) return;
       try {
-        const { data, error } = await supabaseClient
-          .from('trade_logs')
-          .select('*')
-          .eq('student_id', studentId)
-          .order('trade_date', { ascending: true })
-          .order('created_at', { ascending: true });
+        const pageSize = 1000;
+        let from = 0;
+        let allRows = [];
 
-        if (error) {
-          console.error('Supabase load trade_logs error:', error);
-          return;
+        while (true) {
+          const { data, error } = await supabaseClient
+            .from('trade_logs')
+            .select('*')
+            .eq('student_id', studentId)
+            .order('trade_date', { ascending: true })
+            .order('created_at', { ascending: true })
+            .range(from, from + pageSize - 1);
+
+          if (error) {
+            console.error('Supabase load trade_logs error:', error);
+            return;
+          }
+
+          if (data && data.length > 0) {
+            allRows = allRows.concat(data);
+          }
+          if (!data || data.length < pageSize) break;
+          from += pageSize;
         }
 
-        if (data) {
-          const mapped = data.map((t, idx) => {
-            const calc = calculateDynamicTradeMetrics(
-              t.entry_price,
-              t.stop_loss,
-              t.take_profit,
-              t.outcome,
-              Number(t.net_pnl)
-            );
-            return {
-              id: t.id,
-              pair: 'USTECH100',
-              tradeDate: t.trade_date || new Date().toISOString().split('T')[0],
-              position: t.direction === 'SELL' ? 'SELL' : 'BUY',
-              entryPrice: t.entry_price != null ? String(t.entry_price) : '-',
-              lotSize: Number(t.lot_size) || 1.0,
-              stopLoss: t.stop_loss != null ? String(t.stop_loss) : '-',
-              takeProfit: t.take_profit != null ? String(t.take_profit) : '-',
-              executionTime: t.created_at
-                ? new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-                : '09:30 PM',
-              result: calc.outcomeBadge,
-              rrr: calc.rrrLabel,
-              pnl: calc.pnl,
-              note: t.notes || '',
-              createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now() + idx
-            };
-          });
-          localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(mapped));
-          renderAuditTable();
-          updateAuditStats();
-        }
+        const mapped = allRows.map((t, idx) => {
+          const calc = calculateDynamicTradeMetrics(
+            t.entry_price,
+            t.stop_loss,
+            t.take_profit,
+            t.outcome,
+            Number(t.net_pnl)
+          );
+          const decoded = decodeTradePhaseAndNote(t.notes, t.phase);
+          return {
+            id: t.id,
+            pair: 'USTECH100',
+            tradeDate: t.trade_date || new Date().toISOString().split('T')[0],
+            position: t.direction === 'SELL' ? 'SELL' : 'BUY',
+            entryPrice: t.entry_price != null ? String(t.entry_price) : '-',
+            lotSize: Number(t.lot_size) || 1.0,
+            stopLoss: t.stop_loss != null ? String(t.stop_loss) : '-',
+            takeProfit: t.take_profit != null ? String(t.take_profit) : '-',
+            executionTime: t.created_at
+              ? new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+              : '09:30 PM',
+            result: calc.outcomeBadge,
+            rrr: calc.rrrLabel,
+            pnl: calc.pnl,
+            note: decoded.note,
+            phase: decoded.phase,
+            createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now() + idx
+          };
+        });
+        localStorage.setItem(TRADES_STORAGE_KEY, JSON.stringify(mapped));
+        renderAuditTable();
+        updateAuditStats();
       } catch (err) {
         console.error('Failed to fetch student trades:', err);
       }
@@ -5607,6 +5981,8 @@
             t.result ?? t.outcome ?? t.rawResult,
             Number(t.pnl ?? t.net_pnl)
           );
+          const decoded = decodeTradePhaseAndNote(t.note ?? t.notes ?? '', t.phase);
+          const phaseVal = t.phase === 2 || t.phase === 1 ? t.phase : decoded.phase;
           return {
             ...t,
             id: t.id || 'T' + (Date.now() + idx),
@@ -5621,7 +5997,8 @@
             result: calc.outcomeBadge,
             rrr: calc.rrrLabel,
             pnl: calc.pnl,
-            note: t.note ?? t.notes ?? '',
+            note: decoded.note,
+            phase: phaseVal,
             createdAt: t.createdAt || Date.now() + idx
           };
         });
@@ -5638,7 +6015,8 @@
 
     function getAuditCurrentBalance() {
       const startingBal = parseFloat(localStorage.getItem('rjs_desk_start_bal')) || 10000;
-      const trades = getAuditTrades();
+      const activePhase = getActiveStudentPhase();
+      const trades = getAuditTrades().filter((t) => (t.phase || 1) === activePhase);
       let net = 0;
       trades.forEach(t => net += (t.pnl || 0));
       return startingBal + net;
@@ -5679,6 +6057,7 @@
       const takeProfit = document.getElementById('tradeTakeProfit')?.value.trim() || '-';
       const resultSelect = document.getElementById('tradeResult')?.value || 'Take Profit (TP)';
       const note = '';
+      const activePhase = getActiveStudentPhase();
 
       const now = new Date();
       const utc = now.getTime() + now.getTimezoneOffset() * 60000;
@@ -5710,7 +6089,7 @@
               take_profit: parseNumericPrice(takeProfit),
               outcome,
               net_pnl: pnlVal,
-              notes: null
+              notes: encodeTradePhaseNote(activePhase, note)
             })
             .select()
             .single();
@@ -5740,11 +6119,18 @@
         rrr,
         pnl: pnlVal,
         note,
+        phase: activePhase,
         createdAt: Date.now()
       };
 
       const trades = getAuditTrades();
       trades.push(trade);
+      const committedMonthKey = String(tradeDate || '').slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(committedMonthKey) && selectedAuditPeriod !== 'ALL' && selectedAuditPeriod !== committedMonthKey) {
+        selectedAuditPeriod = committedMonthKey;
+        const [cy, cm] = committedMonthKey.split('-').map(Number);
+        pnlCalendarMonthDate = new Date(cy, cm - 1, 1);
+      }
       saveAuditTrades(trades);
 
       playSuccessChime();
@@ -5805,6 +6191,7 @@
 
       localStorage.removeItem(TRADES_STORAGE_KEY);
       localStorage.removeItem('rjs_audit_trades_log');
+      if (typeof dismissAiTradeReview === 'function') dismissAiTradeReview();
       renderAuditTable();
       updateAuditStats();
       playTone(300, 'sawtooth', 0.15);
@@ -5821,45 +6208,313 @@
       }
     }
 
+    function getCurrentAuditMonthKey() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    let selectedAuditPeriod = getCurrentAuditMonthKey();
+    let auditTablePage = 1;
+    let auditTableShowAll = false;
+    const AUDIT_TABLE_PAGE_SIZE = 25;
+
+    function formatAuditPeriodLabel(periodKey) {
+      if (periodKey === 'ALL') return 'All Time';
+      const parts = String(periodKey || '').split('-');
+      const y = Number(parts[0]);
+      const m = Number(parts[1]);
+      if (!y || !m) return String(periodKey || '');
+      return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    }
+
+    function getAuditPeriodContext() {
+      const allTrades = getAuditTrades();
+      const activePhase = getActiveStudentPhase();
+      const activePhaseTrades = allTrades.filter((t) => (t.phase || 1) === activePhase);
+      const phase1ArchivedTrades = activePhase === 2 ? allTrades.filter((t) => (t.phase || 1) === 1) : [];
+      const phase2SwingWinsCount = activePhase === 2 ? activePhaseTrades.filter(isPhase2SwingWin).length : 0;
+
+      const currentMonthKey = getCurrentAuditMonthKey();
+      const monthCounts = {};
+      monthCounts[currentMonthKey] = 0;
+
+      activePhaseTrades.forEach((t) => {
+        const ym = String(t.tradeDate || '').slice(0, 7);
+        if (/^\d{4}-\d{2}$/.test(ym)) {
+          monthCounts[ym] = (monthCounts[ym] || 0) + 1;
+        }
+      });
+
+      const availableMonths = Object.keys(monthCounts).sort((a, b) => b.localeCompare(a));
+      const effectivePeriod =
+        selectedAuditPeriod === 'ALL' || Object.prototype.hasOwnProperty.call(monthCounts, selectedAuditPeriod)
+          ? selectedAuditPeriod
+          : currentMonthKey;
+
+      const periodLabel = formatAuditPeriodLabel(effectivePeriod);
+      const scopedTrades =
+        effectivePeriod === 'ALL'
+          ? activePhaseTrades
+          : activePhaseTrades.filter((t) => String(t.tradeDate || '').slice(0, 7) === effectivePeriod);
+
+      return {
+        allTrades,
+        activePhase,
+        activePhaseTrades,
+        phase1ArchivedTrades,
+        phase2SwingWinsCount,
+        currentMonthKey,
+        monthCounts,
+        availableMonths,
+        effectivePeriod,
+        periodLabel,
+        scopedTrades
+      };
+    }
+
+    function syncAuditPeriodSelectors(ctx) {
+      const selects = [
+        document.getElementById('auditPeriodSelect'),
+        document.getElementById('auditTablePeriodSelect')
+      ];
+      const optionsHtml =
+        ctx.availableMonths
+          .map((mKey) => `<option value="${escapeQuizHtml(mKey)}">${escapeQuizHtml(formatAuditPeriodLabel(mKey))} (${ctx.monthCounts[mKey] || 0})</option>`)
+          .join('') +
+        `<option value="ALL">All Time (${ctx.activePhaseTrades.length})</option>`;
+
+      selects.forEach((sel) => {
+        if (!sel) return;
+        sel.innerHTML = optionsHtml;
+        sel.value = ctx.effectivePeriod;
+      });
+
+      const activePhaseBadge = document.getElementById('auditActivePhaseBadge');
+      if (activePhaseBadge) {
+        activePhaseBadge.textContent = `PHASE ${ctx.activePhase} ACTIVE`;
+        activePhaseBadge.className = ctx.activePhase === 2
+          ? 'px-2 py-0.5 rounded text-[10px] font-bold border bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+          : 'px-2 py-0.5 rounded text-[10px] font-bold border bg-emerald-500/15 border-emerald-500/40 text-emerald-300';
+      }
+
+      const summaryEl = document.getElementById('auditPeriodSummary');
+      if (summaryEl) {
+        const n = ctx.scopedTrades.length;
+        const tot = ctx.activePhaseTrades.length;
+        summaryEl.innerHTML = `Showing <span class="text-emerald-400 font-semibold">${escapeQuizHtml(ctx.periodLabel)}</span> · ${n} Phase ${ctx.activePhase} ${n === 1 ? 'trade' : 'trades'} (${tot} in Phase ${ctx.activePhase})`;
+      }
+
+      const btnAllTime = document.getElementById('btnAuditPeriodAllTime');
+      if (btnAllTime) {
+        if (ctx.effectivePeriod === 'ALL') {
+          btnAllTime.textContent = 'Current Month';
+          btnAllTime.className = 'px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-semibold transition-all cursor-pointer whitespace-nowrap';
+        } else {
+          btnAllTime.textContent = 'All Time';
+          btnAllTime.className = 'px-3 py-1.5 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 hover:text-white hover:border-slate-500 font-semibold transition-all cursor-pointer whitespace-nowrap';
+        }
+      }
+    }
+
+    function setAuditPeriodFilter(nextPeriod) {
+      selectedAuditPeriod = nextPeriod || getCurrentAuditMonthKey();
+      auditTablePage = 1;
+      auditTableShowAll = false;
+      if (typeof dismissAiTradeReview === 'function') dismissAiTradeReview();
+      if (selectedAuditPeriod !== 'ALL' && /^\d{4}-\d{2}$/.test(selectedAuditPeriod)) {
+        const parts = selectedAuditPeriod.split('-').map(Number);
+        pnlCalendarMonthDate = new Date(parts[0], parts[1] - 1, 1);
+      }
+      renderAuditTable();
+      updateAuditStats();
+      playTone(540, 'sine', 0.03);
+    }
+
+    function toggleAuditAllTimeFilter() {
+      const ctx = getAuditPeriodContext();
+      setAuditPeriodFilter(ctx.effectivePeriod === 'ALL' ? ctx.currentMonthKey : 'ALL');
+    }
+
+    function setAuditTablePage(nextPage) {
+      auditTablePage = Math.max(1, Number(nextPage) || 1);
+      renderAuditTable();
+      playTone(500, 'sine', 0.03);
+    }
+
+    function toggleAuditTableShowAll() {
+      auditTableShowAll = !auditTableShowAll;
+      auditTablePage = 1;
+      renderAuditTable();
+      playTone(520, 'sine', 0.03);
+    }
+
+    function renderPhase1ArchiveSection(ctx, startingBal) {
+      const archiveEl = document.getElementById('phase1ArchivedTradesSection');
+      if (!archiveEl) return;
+
+      if (ctx.activePhase !== 2 || ctx.phase1ArchivedTrades.length === 0) {
+        archiveEl.classList.add('hidden');
+        archiveEl.innerHTML = '';
+        return;
+      }
+
+      let archBal = startingBal;
+      const archivedWithBal = ctx.phase1ArchivedTrades.map((t, idx) => {
+        archBal += (t.pnl || 0);
+        return { ...t, index: idx + 1, balanceAfter: archBal };
+      });
+      const archivedNetPnL = archivedWithBal.reduce((sum, t) => sum + (t.pnl || 0), 0);
+      const netSign = archivedNetPnL >= 0 ? '+' : '-';
+      const netAbs = Math.abs(archivedNetPnL).toLocaleString();
+
+      const rowsHtml = [...archivedWithBal].reverse().map((t) => {
+        const isWin = t.pnl > 0;
+        const isLoss = t.pnl < 0;
+        const timeClean = (t.executionTime || '09:30 PM').replace(' PHT', '');
+        const dateClean = t.tradeDate || '2026-11-11';
+        const entryDisplay = (t.entryPrice && t.entryPrice !== '-') ? ` @ ${escapeQuizHtml(String(t.entryPrice))}` : '';
+        const pnlClass = isWin ? 'text-emerald-400/70' : isLoss ? 'text-rose-400/70' : 'text-slate-500';
+        const pnlTxt = isWin ? `+₱${t.pnl.toLocaleString()}` : isLoss ? `-₱${Math.abs(t.pnl).toLocaleString()}` : '₱0';
+
+        return `
+          <tr class="text-slate-400 border-b border-hairline">
+            <td class="py-2 px-3 whitespace-nowrap font-bold">#${String(t.index).padStart(2, '0')}</td>
+            <td class="py-2 px-3 whitespace-nowrap">
+              <span>${escapeQuizHtml(String(dateClean))}</span>
+              <span class="text-slate-600 mx-1.5">•</span>
+              <span class="text-slate-500">${escapeQuizHtml(timeClean)}</span>
+            </td>
+            <td class="py-2 px-3 whitespace-nowrap">
+              <span class="px-1.5 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-400 text-[10px] font-bold">PHASE 1</span>
+            </td>
+            <td class="py-2 px-3 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded bg-slate-800/70 border border-slate-700 text-slate-300 text-[11px]">${escapeQuizHtml(String(t.position || 'BUY'))}${entryDisplay}</span>
+            </td>
+            <td class="py-2 px-3 whitespace-nowrap text-slate-500">SL: ${escapeQuizHtml(String(t.stopLoss || '-'))} | TP: ${escapeQuizHtml(String(t.takeProfit || '-'))}</td>
+            <td class="py-2 px-3 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded bg-slate-800/70 border border-slate-700 text-slate-300">${escapeQuizHtml(String(t.result || ''))}</span>
+            </td>
+            <td class="py-2 px-3 text-right num-mono whitespace-nowrap ${pnlClass}">${pnlTxt}</td>
+            <td class="py-2 px-3 text-right num-mono whitespace-nowrap text-slate-400">₱${(t.balanceAfter ?? startingBal).toLocaleString()}</td>
+          </tr>
+        `;
+      }).join('');
+
+      archiveEl.classList.remove('hidden');
+      archiveEl.innerHTML = `
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-hairline mb-3 gap-2">
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h4 class="text-sm font-bold text-slate-300 uppercase tracking-wide">PHASE 1 TRADES (ARCHIVED)</h4>
+              <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400 font-mono text-[10px] font-bold">PHASE 1</span>
+              <span class="px-2 py-0.5 rounded bg-[#0e131e] border border-hairline text-slate-500 font-mono text-[10px]">EXCLUDED FROM PHASE 2 STATS</span>
+            </div>
+            <p class="text-[11px] font-mono text-slate-500 mt-0.5">
+              ${archivedWithBal.length} historical Phase 1 ${archivedWithBal.length === 1 ? 'trade' : 'trades'} · Archived Net P&amp;L: <span class="font-semibold text-slate-300">${netSign}₱${netAbs}</span>
+            </p>
+          </div>
+        </div>
+        <div class="overflow-x-auto max-h-[320px] overflow-y-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-[#090c13] text-slate-500 uppercase text-[10px] tracking-wider border-b border-hairline">
+              <tr>
+                <th class="py-2 px-3">#</th>
+                <th class="py-2 px-3">DATE &amp; TIME</th>
+                <th class="py-2 px-3">PHASE</th>
+                <th class="py-2 px-3">POSITION</th>
+                <th class="py-2 px-3">BRACKET</th>
+                <th class="py-2 px-3">OUTCOME</th>
+                <th class="py-2 px-3 text-right">NET P&amp;L</th>
+                <th class="py-2 px-3 text-right">ARCHIVED BAL</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-hairline">${rowsHtml}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
     function renderAuditTable() {
       const container = document.getElementById('auditTableBody');
       const emptyState = document.getElementById('auditEmptyState');
-      const filter = document.getElementById('auditTableFilter').value;
-      
-      const allTrades = getAuditTrades();
-      container.innerHTML = '';
+      const paginationBar = document.getElementById('auditTablePaginationBar');
+      const subtitleEl = document.getElementById('auditTableSubtitle');
+      const emptyTitle = document.getElementById('auditEmptyTitle');
+      const emptySubtitle = document.getElementById('auditEmptySubtitle');
+      const headerTitleEl = document.getElementById('auditTableHeaderTitle');
+      const headerPhaseBadgeEl = document.getElementById('auditTablePhaseBadge');
+      const filter = document.getElementById('auditTableFilter')?.value || 'ALL';
+
+      const ctx = getAuditPeriodContext();
+      syncAuditPeriodSelectors(ctx);
+
+      if (headerTitleEl) {
+        headerTitleEl.textContent = ctx.activePhase === 2
+          ? 'PHASE 2 TRADES'
+          : 'PHASE 1 TRADES // AUDIT EXECUTION JOURNAL';
+      }
+      if (headerPhaseBadgeEl) {
+        headerPhaseBadgeEl.textContent = `PHASE ${ctx.activePhase}`;
+        headerPhaseBadgeEl.className = ctx.activePhase === 2
+          ? 'px-2 py-0.5 rounded text-[10px] font-mono font-bold border bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+          : 'px-2 py-0.5 rounded text-[10px] font-mono font-bold border bg-emerald-500/15 border-emerald-500/40 text-emerald-300';
+      }
+
+      if (container) container.innerHTML = '';
 
       const startingBal = parseFloat(localStorage.getItem('rjs_desk_start_bal')) || 10000;
-      let runningBal = startingBal;
+      renderPhase1ArchiveSection(ctx, startingBal);
 
-      const tradesWithBal = allTrades.map((t, idx) => {
+      let runningBal = startingBal;
+      const tradesWithBal = ctx.scopedTrades.map((t, idx) => {
         runningBal += (t.pnl || 0);
-        return { 
-          ...t, 
-          index: idx + 1, 
-          balanceAfter: runningBal 
+        return {
+          ...t,
+          index: idx + 1,
+          balanceAfter: runningBal
         };
       });
 
-      const filtered = tradesWithBal.filter(t => {
+      const filtered = tradesWithBal.filter((t) => {
         if (filter === 'WINS') return t.pnl > 0;
         if (filter === 'LOSSES') return t.pnl < 0;
         if (filter === 'BE') return t.pnl === 0;
         return true;
       });
 
-      if (filtered.length === 0) {
-        emptyState.classList.remove('hidden');
-      } else {
-        emptyState.classList.add('hidden');
+      if (subtitleEl) {
+        subtitleEl.textContent = `${ctx.periodLabel} · ${filtered.length} ${filtered.length === 1 ? 'entry' : 'entries'} shown`;
       }
 
-      [...filtered].reverse().forEach(t => {
+      if (filtered.length === 0) {
+        if (emptyState) emptyState.classList.remove('hidden');
+        if (emptyTitle) emptyTitle.textContent = `No Phase ${ctx.activePhase} trades logged for ${ctx.periodLabel}.`;
+        if (emptySubtitle) {
+          emptySubtitle.textContent = ctx.activePhaseTrades.length > 0
+            ? 'Switch the Month / Year filter above or commit a new trade for this period.'
+            : 'Execute your setup during NY Cash Open and record your first trade.';
+        }
+        if (paginationBar) paginationBar.classList.add('hidden');
+        return;
+      } else {
+        if (emptyState) emptyState.classList.add('hidden');
+      }
+
+      const reversed = [...filtered].reverse();
+      const totalPages = Math.max(1, Math.ceil(reversed.length / AUDIT_TABLE_PAGE_SIZE));
+      if (auditTablePage > totalPages) auditTablePage = totalPages;
+
+      const visibleRows =
+        auditTableShowAll || reversed.length <= AUDIT_TABLE_PAGE_SIZE
+          ? reversed
+          : reversed.slice((auditTablePage - 1) * AUDIT_TABLE_PAGE_SIZE, auditTablePage * AUDIT_TABLE_PAGE_SIZE);
+
+      visibleRows.forEach((t) => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-800/30 transition-colors border-b border-hairline';
 
         let pnlClass = 'text-slate-400';
-        let pnlText = `₱0`;
+        let pnlText = '₱0';
         if (t.pnl > 0) {
           pnlClass = 'text-emerald-400 font-bold';
           pnlText = `+₱${t.pnl.toLocaleString()}`;
@@ -5871,42 +6526,70 @@
         let outcomeBadge = '';
         const resStr = String(t.result || '');
         if (t.pnl < 0 || resStr.includes('SL')) {
-          outcomeBadge = `<span class="px-2 py-0.5 rounded font-bold border bg-rose-950/80 border-rose-500/40 text-rose-400">${resStr || 'SL -1R'}</span>`;
+          outcomeBadge = `<span class="px-2 py-0.5 rounded font-bold border bg-rose-950/80 border-rose-500/40 text-rose-400">${escapeQuizHtml(resStr || 'SL -1R')}</span>`;
         } else if (t.pnl === 0 || resStr.includes('BE')) {
-          outcomeBadge = `<span class="px-2 py-0.5 rounded font-bold border bg-slate-800 border-slate-700 text-slate-300">${resStr || 'BE 0R'}</span>`;
+          outcomeBadge = `<span class="px-2 py-0.5 rounded font-bold border bg-slate-800 border-slate-700 text-slate-300">${escapeQuizHtml(resStr || 'BE 0R')}</span>`;
         } else {
-          outcomeBadge = `<span class="px-2 py-0.5 rounded font-bold border bg-emerald-950/80 border-emerald-500/40 text-emerald-400">${resStr}</span>`;
+          outcomeBadge = `<span class="px-2 py-0.5 rounded font-bold border bg-emerald-950/80 border-emerald-500/40 text-emerald-400">${escapeQuizHtml(resStr)}</span>`;
         }
 
         const numClean = `#${String(t.index).padStart(2, '0')}`;
         const timeClean = (t.executionTime || '09:30 PM').replace(' PHT', '');
 
         const isBuy = t.position === 'BUY';
-        const entryDisplay = (t.entryPrice && t.entryPrice !== '-') ? ` @ ${t.entryPrice}` : '';
+        const entryDisplay = (t.entryPrice && t.entryPrice !== '-') ? ` @ ${escapeQuizHtml(String(t.entryPrice))}` : '';
         const posBadge = isBuy
           ? `<span class="px-2.5 py-1 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 font-bold whitespace-nowrap text-[11px]">BUY${entryDisplay}</span>`
           : `<span class="px-2.5 py-1 rounded bg-rose-950/80 border border-rose-500/40 text-rose-400 font-bold whitespace-nowrap text-[11px]">SELL${entryDisplay}</span>`;
 
-        const bracketDisplay = `<span class="text-rose-400/90 font-mono">SL: ${t.stopLoss || '-'}</span> <span class="text-slate-600 font-mono mx-1">|</span> <span class="text-emerald-400/90 font-mono">TP: ${t.takeProfit || '-'}</span>`;
+        const bracketDisplay = `<span class="text-rose-400/90 font-mono">SL: ${escapeQuizHtml(String(t.stopLoss || '-'))}</span> <span class="text-slate-600 font-mono mx-1">|</span> <span class="text-emerald-400/90 font-mono">TP: ${escapeQuizHtml(String(t.takeProfit || '-'))}</span>`;
 
         tr.innerHTML = `
           <td class="py-2.5 px-3 text-slate-400 whitespace-nowrap font-mono">${numClean}</td>
-          <td class="py-2.5 px-3 text-slate-300 whitespace-nowrap font-mono font-medium">${t.tradeDate} <span class="text-slate-600">•</span> ${timeClean}</td>
+          <td class="py-2.5 px-3 text-slate-300 whitespace-nowrap font-mono font-medium">${escapeQuizHtml(String(t.tradeDate || ''))} <span class="text-slate-600">•</span> ${escapeQuizHtml(timeClean)}</td>
           <td class="py-2.5 px-3 whitespace-nowrap">${posBadge}</td>
           <td class="py-2.5 px-3 whitespace-nowrap text-xs">${bracketDisplay}</td>
           <td class="py-2.5 px-3 whitespace-nowrap">${outcomeBadge}</td>
           <td class="py-2.5 px-3 text-right ${pnlClass} num-mono whitespace-nowrap">${pnlText}</td>
           <td class="py-2.5 px-3 text-right text-white font-mono num-mono font-bold whitespace-nowrap">₱${t.balanceAfter.toLocaleString()}</td>
           <td class="py-2.5 px-3 text-right">
-            <button type="button" onclick="deleteTrade('${t.id}')" class="text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition-colors" title="Delete trade">
+            <button type="button" onclick="deleteTrade('${escapeQuizHtml(String(t.id))}')" class="text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition-colors" title="Delete trade">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
               </svg>
             </button>
           </td>
         `;
-        container.appendChild(tr);
+        if (container) container.appendChild(tr);
       });
+
+      if (paginationBar) {
+        if (reversed.length > AUDIT_TABLE_PAGE_SIZE) {
+          paginationBar.classList.remove('hidden');
+          const startIdx = (auditTablePage - 1) * AUDIT_TABLE_PAGE_SIZE + 1;
+          const endIdx = Math.min(auditTablePage * AUDIT_TABLE_PAGE_SIZE, reversed.length);
+          const countLabel = auditTableShowAll
+            ? `Showing all ${reversed.length} trades`
+            : `Showing ${startIdx}–${endIdx} of ${reversed.length} trades`;
+          const pageButtons = auditTableShowAll
+            ? ''
+            : `
+              <button type="button" ${auditTablePage <= 1 ? 'disabled' : ''} onclick="setAuditTablePage(${auditTablePage - 1})" class="px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 hover:text-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed">Prev</button>
+              <span class="px-2 text-slate-300">${auditTablePage} / ${totalPages}</span>
+              <button type="button" ${auditTablePage >= totalPages ? 'disabled' : ''} onclick="setAuditTablePage(${auditTablePage + 1})" class="px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-slate-300 hover:text-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed">Next</button>
+            `;
+          paginationBar.innerHTML = `
+            <span class="text-slate-400">${countLabel}</span>
+            <div class="flex items-center gap-1.5">
+              ${pageButtons}
+              <button type="button" onclick="toggleAuditTableShowAll()" class="px-2.5 py-1 rounded-lg bg-[#0e131e] border border-hairline text-emerald-400 hover:border-emerald-500/40 cursor-pointer">${auditTableShowAll ? 'Paginate (25/page)' : 'Show All'}</button>
+            </div>
+          `;
+        } else {
+          paginationBar.classList.add('hidden');
+          paginationBar.innerHTML = '';
+        }
+      }
     }
 
     let trajectoryChart = null;
@@ -5915,7 +6598,8 @@
       const canvas = document.getElementById('trajectoryChartCanvas');
       if (!canvas || typeof Chart === 'undefined') return;
 
-      const trades = getAuditTrades();
+      const ctx = getAuditPeriodContext();
+      const trades = ctx.scopedTrades;
       let cumulative = 0;
       const labels = ['Trade 0'];
       const chartData = [0];
@@ -5926,8 +6610,15 @@
         chartData.push(cumulative);
       });
 
-      const milestoneTarget = 10000;
+      const milestoneTarget = ctx.activePhase === 2 ? 20000 : 10000;
       const milestoneLineData = new Array(labels.length).fill(milestoneTarget);
+
+      const titleHeadingEl = document.getElementById('trajectoryTitleHeading');
+      if (titleHeadingEl) titleHeadingEl.textContent = `GOAL TRAJECTORY // ₱${milestoneTarget.toLocaleString()} MILESTONE`;
+      const targetBadgeEl = document.getElementById('trajectoryTargetBadge');
+      if (targetBadgeEl) targetBadgeEl.textContent = `+₱${milestoneTarget.toLocaleString()} Milestone`;
+      const distSubEl = document.getElementById('trajectoryDistanceSubtext');
+      if (distSubEl) distSubEl.textContent = `To +₱${milestoneTarget.toLocaleString()} milestone`;
 
       const netPnL = cumulative;
       const trajectoryProgressPct = Math.min(100, Math.max(0, (netPnL / milestoneTarget) * 100));
@@ -5942,7 +6633,7 @@
       if (barEl) barEl.style.width = `${trajectoryProgressPct}%`;
 
       const netTextEl = document.getElementById('trajectoryNetPnLText');
-      if (netTextEl) netTextEl.textContent = `₱${Math.max(0, netPnL).toLocaleString()} / ₱10,000`;
+      if (netTextEl) netTextEl.textContent = `₱${Math.max(0, netPnL).toLocaleString()} / ₱${milestoneTarget.toLocaleString()}`;
 
       const peakEl = document.getElementById('trajectoryPeakGain');
       if (peakEl) peakEl.textContent = `+₱${peakGain.toLocaleString()}`;
@@ -5990,7 +6681,9 @@
         trajectoryChart.data.labels = labels;
         trajectoryChart.data.datasets[0].data = chartData;
         trajectoryChart.data.datasets[0].pointBorderColor = chartTheme.pointBorderColor;
+        trajectoryChart.data.datasets[0].pointRadius = trades.length > 60 ? 2 : 4;
         if (trajectoryChart.data.datasets[1]) {
+          trajectoryChart.data.datasets[1].label = `₱${milestoneTarget.toLocaleString()} Milestone`;
           trajectoryChart.data.datasets[1].data = milestoneLineData;
         }
         const opts = trajectoryChart.options;
@@ -6009,8 +6702,8 @@
         return;
       }
 
-      const ctx = canvas.getContext('2d');
-      trajectoryChart = new Chart(ctx, {
+      const ctxCanvas = canvas.getContext('2d');
+      trajectoryChart = new Chart(ctxCanvas, {
         type: 'line',
         data: {
           labels,
@@ -6032,7 +6725,7 @@
               },
               pointBorderColor: chartTheme.pointBorderColor,
               pointBorderWidth: 2,
-              pointRadius: 4,
+              pointRadius: trades.length > 60 ? 2 : 4,
               pointHoverRadius: 6,
               segment: {
                 borderColor: (ctxSegment) => {
@@ -6043,7 +6736,7 @@
               }
             },
             {
-              label: '₱10,000 Milestone',
+              label: `₱${milestoneTarget.toLocaleString()} Milestone`,
               data: milestoneLineData,
               borderColor: '#f59e0b',
               borderWidth: 1.5,
@@ -6111,7 +6804,9 @@
     }
 
     function updateAuditStats() {
-      const trades = getAuditTrades();
+      const ctx = getAuditPeriodContext();
+      syncAuditPeriodSelectors(ctx);
+      const trades = ctx.scopedTrades;
       const startingBal = parseFloat(localStorage.getItem('rjs_desk_start_bal')) || 10000;
       
       let netPnL = 0;
@@ -6119,7 +6814,7 @@
       let losses = 0;
       let be = 0;
 
-      trades.forEach(t => {
+      trades.forEach((t) => {
         const val = t.pnl || 0;
         netPnL += val;
         if (val > 0) wins++;
@@ -6154,17 +6849,17 @@
         pnlEl.textContent = `-₱${Math.abs(netPnL).toLocaleString()}`;
         pnlEl.className = 'text-xl font-bold font-mono text-rose-400 num-mono mt-1';
       }
-      document.getElementById('statRUnits').textContent = `${totalR >= 0 ? '+' : ''}${totalR}R TOTAL`;
+      document.getElementById('statRUnits').textContent = `${totalR >= 0 ? '+' : ''}${totalR}R · ${ctx.periodLabel}`;
 
       document.getElementById('statWinRate').textContent = `${winRate}%`;
       document.getElementById('statWinCount').textContent = `${wins} W / ${losses} L / ${be} BE`;
 
-      const cappedProgress = Math.min(totalTrades, 20);
-      const progressPct = ((cappedProgress / 20) * 100).toFixed(0);
-      document.getElementById('statProgressRatio').textContent = `${totalTrades} / 20`;
-      document.getElementById('auditProgressPill').textContent = `${totalTrades}/20`;
-      document.getElementById('auditProgressBar').style.width = `${progressPct}%`;
-      document.getElementById('statAuditPercent').textContent = `${progressPct}%`;
+      const statTotalEl = document.getElementById('statTotalTrades');
+      if (statTotalEl) statTotalEl.textContent = `${totalTrades} ${totalTrades === 1 ? 'Trade' : 'Trades'}`;
+      const statPeriodEl = document.getElementById('statTotalTradesPeriod');
+      if (statPeriodEl) statPeriodEl.textContent = ctx.periodLabel;
+      const pillEl = document.getElementById('auditProgressPill');
+      if (pillEl) pillEl.textContent = `${ctx.activePhaseTrades.length} LOGS`;
 
       initOrUpdateTrajectoryChart();
       renderPnLCalendar();
@@ -6195,7 +6890,8 @@
       const monthIdx = pnlCalendarMonthDate.getMonth();
       label.textContent = pnlCalendarMonthDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
-      const trades = getAuditTrades();
+      const activePhase = getActiveStudentPhase();
+      const trades = getAuditTrades().filter((t) => (t.phase || 1) === activePhase);
       const dailyStats = {};
       trades.forEach(t => {
         const key = String(t.tradeDate || '').slice(0, 10);
@@ -6288,9 +6984,10 @@
     }
 
     function exportAuditCSV() {
-      const trades = getAuditTrades();
+      const ctx = getAuditPeriodContext();
+      const trades = ctx.scopedTrades;
       if (trades.length === 0) {
-        alert('No audit trades to export.');
+        alert('No audit trades to export for this period.');
         return;
       }
 
@@ -6312,7 +7009,8 @@
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `RyanJade_Phase2_AuditLedger_${new Date().toISOString().slice(0,10)}.csv`);
+      const suffix = ctx.effectivePeriod === 'ALL' ? 'AllTime' : ctx.effectivePeriod;
+      link.setAttribute('download', `RyanJade_AuditLedger_${suffix}_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -6877,7 +7575,7 @@
 
     function extractLessonIdsFromCloud(rawList) {
       if (!Array.isArray(rawList)) return [];
-      return rawList.filter(item => typeof item === 'string' && !item.startsWith('quiz_'));
+      return rawList.filter(item => typeof item === 'string' && !item.startsWith('quiz_') && !item.startsWith('phase_current_'));
     }
 
     function extractQuizProgressFromCloud(rawList) {
@@ -6947,6 +7645,9 @@
 
       if (currentStudentSession?.id && supabaseClient) {
         try {
+          const existingPhaseTokens = Array.isArray(currentStudentSession.unlocked_lessons)
+            ? currentStudentSession.unlocked_lessons.filter((item) => typeof item === 'string' && item.startsWith('phase_current_'))
+            : [];
           const lessonOnly = extractLessonIdsFromCloud(currentStudentSession.unlocked_lessons);
           const quizTokens = [];
           [1, 2, 3, 4].forEach(secId => {
@@ -6957,7 +7658,7 @@
               quizTokens.push(`quiz_s${secId}_${eff}`);
             }
           });
-          const mergedCloud = [...lessonOnly, ...quizTokens];
+          const mergedCloud = [...lessonOnly, ...quizTokens, ...existingPhaseTokens];
           const { error } = await supabaseClient
             .from('students')
             .update({ unlocked_lessons: mergedCloud })
@@ -6984,7 +7685,7 @@
       renderTraderProgressRail();
     }
 
-    function buildProgressRingCardHtml({ title, percentage, subtitle, strokeColor, accentTextClass, iconSvg, locked, lockedLabel, clickJs }) {
+    function buildProgressRingCardHtml({ title, percentage, subtitle, subNote, footerHtml, strokeColor, accentTextClass, iconSvg, locked, lockedLabel, clickJs }) {
       const clampedPct = Math.min(100, Math.max(0, percentage));
       const roundedPct = Math.round(clampedPct);
       const size = 84;
@@ -7029,7 +7730,9 @@
                 </div>
               </div>
               <div class="mt-2 text-[11px] font-mono font-semibold num-mono text-center ${accentTextClass}">${subtitle}</div>
+              ${subNote ? `<div class="mt-0.5 text-[10px] font-mono text-slate-400 text-center">${escapeQuizHtml(subNote)}</div>` : ''}
             </div>
+            ${footerHtml || ''}
           </div>
           ${lockOverlay}
         </div>
@@ -7051,12 +7754,44 @@
       const isPhase2Unlocked = hasPhase2Access(currentStudentSession);
       const p2Pct = isPhase2Unlocked && p2Total > 0 ? (p2Completed / p2Total) * 100 : 0;
 
-      const trades = getAuditTrades();
-      const netPnL = trades.reduce((acc, t) => acc + (t.pnl || 0), 0);
-      const profitGoalTarget = 10000;
+      const auditCtx = getAuditPeriodContext();
+      const activePhase = auditCtx.activePhase;
+      const netPnL = auditCtx.scopedTrades.reduce((acc, t) => acc + (t.pnl || 0), 0);
+      const profitGoalTarget = activePhase === 2 ? 20000 : 10000;
       const profitPct = Math.min(100, Math.max(0, (netPnL / profitGoalTarget) * 100));
       const formattedNetPnL = netPnL < 0 ? `-₱${Math.abs(netPnL).toLocaleString()}` : `₱${netPnL.toLocaleString()}`;
-      const profitAccent = netPnL < 0 ? 'text-rose-400' : profitPct >= 100 ? 'text-emerald-400' : 'text-amber-400';
+      const profitAccent = netPnL < 0 ? 'text-rose-400' : profitPct >= 100 ? 'text-emerald-400' : activePhase === 2 ? 'text-cyan-400' : 'text-amber-400';
+
+      const swingWinsCount = auditCtx.phase2SwingWinsCount || 0;
+      const swingTarget = 2;
+      const swingDoneCheck = '<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+      const swingMilestoneFooterHtml = activePhase === 2
+        ? `
+          <div class="mt-3 pt-2.5 border-t border-hairline space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[9px] font-mono uppercase tracking-wider font-bold text-cyan-400 flex items-center gap-1">
+                <span>1:4 / 1:5 SWING WINS</span>
+              </span>
+              <span class="text-[10px] font-mono font-bold num-mono ${swingWinsCount >= swingTarget ? 'text-emerald-400' : 'text-slate-300'}">${swingWinsCount} / ${swingTarget} Completed</span>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              ${[0, 1].map((idx) => {
+                const done = swingWinsCount > idx;
+                return `
+                  <div class="h-6 rounded-md border flex items-center justify-center gap-1 text-[9px] font-mono font-bold transition-all ${
+                    done
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                      : 'bg-[#0e131e] border-hairline text-slate-500'
+                  }">
+                    ${done ? swingDoneCheck : ''}
+                    <span>SWING #${idx + 1}</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `
+        : '';
 
       const passedQuizSections = quizProgressState.passedSections.length;
       const quizPct = (passedQuizSections / 4) * 100;
@@ -7098,10 +7833,12 @@
               clickJs: "switchWorkspaceTab('vault'); switchCurriculumPhase(2);"
             })}
             ${buildProgressRingCardHtml({
-              title: '₱10,000 PROFIT GOAL',
+              title: activePhase === 2 ? 'PHASE 2 PROFIT GOAL' : 'PHASE 1 PROFIT GOAL',
               percentage: profitPct,
-              subtitle: `${formattedNetPnL} / ₱10,000`,
-              strokeColor: profitPct >= 100 ? '#10b981' : '#f59e0b',
+              subtitle: `${formattedNetPnL} / ₱${profitGoalTarget.toLocaleString()}`,
+              subNote: `${auditCtx.periodLabel} · Phase ${activePhase} Only`,
+              footerHtml: swingMilestoneFooterHtml,
+              strokeColor: profitPct >= 100 ? '#10b981' : activePhase === 2 ? '#06b6d4' : '#f59e0b',
               accentTextClass: profitAccent,
               iconSvg: iconTrend,
               locked: false,
@@ -8845,7 +9582,338 @@
       loadSimulatorHighScore();
       renderSimulatorTab();
       renderTraderProgressRail();
+      if (typeof renderAskDeskAiChat === 'function') renderAskDeskAiChat();
     });
+
+    /* -------------------------------------------------------------
+       SERVER-SIDE AI TRADE LOGBOOK REVIEW & ASK RJS DESK AI MENTOR
+    -------------------------------------------------------------- */
+    let aiReviewState = { loading: false, error: null, data: null };
+    let deskAiMessages = [];
+    let deskAiOpen = false;
+    let deskAiSending = false;
+    let deskAiError = null;
+
+    const DESK_AI_QUICK_PROMPTS = [
+      'Checklist before entering a 15m breakout',
+      'Option 1 vs Option 2 for 1:4 swing scaling',
+      'Red news buffer rules',
+      'Why no trendline bounces?'
+    ];
+
+    function dismissAiTradeReview() {
+      aiReviewState = { loading: false, error: null, data: null };
+      renderAiTradeReviewCard();
+    }
+
+    function renderAiTradeReviewCard() {
+      const cardEl = document.getElementById('aiTradeReviewCard');
+      const btnEl = document.getElementById('btnAiTradeReview');
+      const lblEl = document.getElementById('btnAiTradeReviewLabel');
+      if (btnEl) btnEl.disabled = !!aiReviewState.loading;
+      if (lblEl) lblEl.textContent = aiReviewState.loading ? 'ANALYZING...' : 'AI DESK PERFORMANCE REVIEW';
+      if (!cardEl) return;
+
+      if (!aiReviewState.loading && !aiReviewState.error && !aiReviewState.data) {
+        cardEl.classList.add('hidden');
+        cardEl.innerHTML = '';
+        return;
+      }
+
+      const ctx = getAuditPeriodContext();
+      const review = aiReviewState.data;
+      const periodText = escapeQuizHtml(review?.periodLabel || `${ctx.periodLabel} · Phase ${ctx.activePhase}`);
+      const score = Number(review?.disciplineScore ?? 0);
+      const tone = score >= 80
+        ? { text: 'text-emerald-400', bar: 'bg-emerald-500', badge: 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300' }
+        : score >= 60
+        ? { text: 'text-amber-400', bar: 'bg-amber-500', badge: 'bg-amber-500/15 border-amber-500/35 text-amber-300' }
+        : { text: 'text-rose-400', bar: 'bg-rose-500', badge: 'bg-rose-500/15 border-rose-500/35 text-rose-300' };
+
+      let bodyHtml = '';
+      if (aiReviewState.loading) {
+        bodyHtml = `
+          <div class="py-8 flex flex-col items-center justify-center gap-2.5 text-center">
+            <svg class="w-6 h-6 animate-spin text-emerald-400" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <div class="text-xs font-mono font-semibold text-white">Auditing ${periodText} execution logs against RJS Desk rules...</div>
+            <div class="text-[11px] font-mono text-slate-400">Checking R:R consistency, sizing discipline, and tilt clusters.</div>
+          </div>
+        `;
+      } else if (aiReviewState.error) {
+        bodyHtml = `
+          <div class="p-3.5 rounded-xl bg-rose-950/35 border border-rose-500/40 flex items-start gap-2.5 text-xs font-mono text-rose-300">
+            <div>
+              <div class="font-bold text-rose-300">AI Review Unavailable</div>
+              <div class="text-[11px] mt-0.5 text-rose-300/90">${escapeQuizHtml(aiReviewState.error)}</div>
+            </div>
+          </div>
+        `;
+      } else if (review) {
+        const planItems = (Array.isArray(review.actionPlan) ? review.actionPlan : []).map((step, idx) => `
+          <div class="rounded-lg p-3 bg-[#0e131e] border border-hairline flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 font-mono text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">${idx + 1}</span>
+            <p class="text-xs text-slate-200 leading-relaxed">${escapeQuizHtml(step)}</p>
+          </div>
+        `).join('');
+
+        bodyHtml = `
+          <div class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div class="md:col-span-4 rounded-xl p-4 bg-[#070a12] border border-hairline flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-[10px] font-mono uppercase tracking-wider font-bold text-slate-400">Discipline &amp; Rule Score</span>
+                  <span class="px-2 py-0.5 rounded border text-[9px] font-mono font-bold uppercase ${tone.badge}">${escapeQuizHtml(review.scoreLabel)}</span>
+                </div>
+                <div class="mt-3 flex items-baseline gap-1.5">
+                  <span class="text-3xl font-extrabold font-mono num-mono ${tone.text}">${score}</span>
+                  <span class="text-xs font-mono text-slate-500">/ 100</span>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-2 mt-2.5 overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500 ${tone.bar}" style="width: ${Math.max(0, Math.min(100, score))}%"></div>
+                </div>
+              </div>
+
+              <div class="md:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="rounded-xl p-4 bg-emerald-950/20 border border-emerald-500/30 space-y-1.5">
+                  <div class="text-[10px] font-mono uppercase tracking-wider font-bold text-emerald-400">Top Strength</div>
+                  <p class="text-xs text-slate-200 leading-relaxed">${escapeQuizHtml(review.topStrength)}</p>
+                </div>
+                <div class="rounded-xl p-4 bg-rose-950/20 border border-rose-500/30 space-y-1.5">
+                  <div class="text-[10px] font-mono uppercase tracking-wider font-bold text-rose-400">Primary Leak / Tilt Warning</div>
+                  <p class="text-xs text-slate-200 leading-relaxed">${escapeQuizHtml(review.primaryLeak)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-xl p-4 bg-[#070a12] border border-hairline space-y-2.5">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="text-[10px] font-mono uppercase tracking-wider font-bold text-amber-400">3-Point Action Plan — Next Trading Week</div>
+                ${review.summaryNote ? `<span class="text-[11px] font-mono text-slate-400">${escapeQuizHtml(review.summaryNote)}</span>` : ''}
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">${planItems}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      cardEl.className = 'glass-card rounded-2xl p-4 sm:p-5 border border-emerald-500/30 shadow-[0_12px_35px_-12px_rgba(16,185,129,0.18)] space-y-4';
+      cardEl.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-hairline">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/35 flex items-center justify-center text-emerald-400 shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+              </svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h4 class="text-xs sm:text-sm font-bold text-white uppercase tracking-wide font-mono">AI DESK PERFORMANCE REVIEW</h4>
+                <span class="px-2 py-0.5 rounded-md bg-[#0e131e] border border-hairline text-[10px] font-mono text-slate-300">${periodText}</span>
+              </div>
+              <p class="text-[11px] font-mono text-slate-400 mt-0.5">RJS Mechanical USTECH100 Risk &amp; Tilt Audit</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button type="button" onclick="runAiTradeReview()" ${aiReviewState.loading ? 'disabled' : ''} class="px-2.5 py-1.5 rounded-lg bg-[#0e131e] border border-hairline hover:border-emerald-500/40 text-slate-300 hover:text-white font-mono text-[11px] font-semibold cursor-pointer disabled:opacity-50">Re-Analyze</button>
+            <button type="button" onclick="dismissAiTradeReview()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors cursor-pointer" aria-label="Close AI Desk Performance Review">✕</button>
+          </div>
+        </div>
+        ${bodyHtml}
+      `;
+    }
+
+    async function runAiTradeReview() {
+      if (aiReviewState.loading) return;
+      const ctx = getAuditPeriodContext();
+      if (!ctx.scopedTrades || ctx.scopedTrades.length === 0) {
+        aiReviewState = {
+          loading: false,
+          error: `No Phase ${ctx.activePhase} trades logged in ${ctx.periodLabel}. Log at least one trade or switch to All Time to run an AI Desk Performance Review.`,
+          data: null
+        };
+        renderAiTradeReviewCard();
+        playErrorTone();
+        return;
+      }
+
+      aiReviewState = { loading: true, error: null, data: aiReviewState.data };
+      renderAiTradeReviewCard();
+      playTone(580, 'sine', 0.04);
+
+      try {
+        const startingBalance = parseFloat(localStorage.getItem('rjs_desk_start_bal')) || 10000;
+        const periodTag = `${ctx.periodLabel} · Phase ${ctx.activePhase}`;
+
+        const response = await fetch('/api/ai/trade-review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            periodLabel: periodTag,
+            startingBalance,
+            trades: ctx.scopedTrades
+          })
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('AI Desk Performance Review server endpoint is unavailable.');
+        }
+
+        const payload = await response.json();
+        if (!response.ok || !payload.review) {
+          throw new Error(payload.error || 'Failed to generate AI Desk Performance Review.');
+        }
+
+        aiReviewState = {
+          loading: false,
+          error: null,
+          data: payload.review
+        };
+        renderAiTradeReviewCard();
+        playSuccessChime();
+      } catch (err) {
+        aiReviewState = {
+          loading: false,
+          error: err?.message || 'Unable to generate AI Desk Performance Review.',
+          data: null
+        };
+        renderAiTradeReviewCard();
+        playErrorTone();
+      }
+    }
+
+    function toggleAskDeskAi(forceState) {
+      deskAiOpen = typeof forceState === 'boolean' ? forceState : !deskAiOpen;
+      const drawer = document.getElementById('askDeskAiDrawer');
+      if (drawer) drawer.classList.toggle('hidden', !deskAiOpen);
+      if (deskAiOpen) {
+        renderAskDeskAiChat();
+        setTimeout(() => document.getElementById('askDeskAiInput')?.focus(), 120);
+        playTone(600, 'sine', 0.04);
+      }
+    }
+
+    function clearAskDeskAiChat() {
+      deskAiMessages = [];
+      deskAiError = null;
+      renderAskDeskAiChat();
+      playTone(440, 'sine', 0.03);
+    }
+
+    function renderAskDeskAiChat() {
+      const box = document.getElementById('askDeskAiMessages');
+      const strip = document.getElementById('askDeskAiQuickStrip');
+      const clearBtn = document.getElementById('btnClearDeskAi');
+      const inputEl = document.getElementById('askDeskAiInput');
+      const sendBtn = document.getElementById('askDeskAiSendBtn');
+
+      if (clearBtn) clearBtn.classList.toggle('hidden', deskAiMessages.length === 0);
+      if (inputEl) inputEl.disabled = deskAiSending;
+      if (sendBtn) sendBtn.disabled = deskAiSending;
+
+      if (!box) return;
+
+      if (deskAiMessages.length === 0) {
+        const chips = DESK_AI_QUICK_PROMPTS.map((q) => `
+          <button type="button" onclick="sendDeskAiMessage(${JSON.stringify(q).replace(/"/g, '&quot;')})" class="text-left px-2.5 py-1.5 rounded-lg bg-[#0e131e] border border-hairline hover:border-emerald-500/45 text-[11px] font-mono text-slate-300 hover:text-white transition-all cursor-pointer">${escapeQuizHtml(q)}</button>
+        `).join('');
+        box.innerHTML = `
+          <div class="space-y-3">
+            <div class="rounded-xl p-3.5 bg-[#070a12] border border-hairline space-y-1.5">
+              <div class="text-[11px] font-mono font-bold text-emerald-400 uppercase tracking-wider">RJS Mechanical Rules Only</div>
+              <p class="text-xs text-slate-300 leading-relaxed">Ask about 15m body breakout + pullback entries on USTECH100, Forex Factory red news clearance, 1R / 0.5R risk sizing, or Option 1 vs Option 2 swing scaling.</p>
+            </div>
+            <div class="space-y-1.5">
+              <div class="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-semibold px-0.5">Quick-Starter Prompts</div>
+              <div class="flex flex-wrap gap-1.5">${chips}</div>
+            </div>
+            ${deskAiError ? `<div class="p-2.5 rounded-xl bg-rose-950/35 border border-rose-500/40 text-[11px] font-mono text-rose-300">${escapeQuizHtml(deskAiError)}</div>` : ''}
+          </div>
+        `;
+        if (strip) {
+          strip.classList.add('hidden');
+          strip.innerHTML = '';
+        }
+      } else {
+        const msgHtml = deskAiMessages.map((m) => `
+          <div class="flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}">
+            <div class="max-w-[86%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap ${m.role === 'user' ? 'bg-emerald-600 text-white font-medium shadow-sm' : 'bg-[#070a12] border border-hairline text-slate-200'}">${escapeQuizHtml(m.text)}</div>
+          </div>
+        `).join('');
+        const loadingHtml = deskAiSending ? `
+          <div class="flex justify-start">
+            <div class="rounded-xl px-3 py-2 bg-[#070a12] border border-hairline text-xs font-mono text-slate-400">Checking RJS Playbook...</div>
+          </div>
+        ` : '';
+        const errHtml = deskAiError ? `<div class="p-2.5 rounded-xl bg-rose-950/35 border border-rose-500/40 text-[11px] font-mono text-rose-300">${escapeQuizHtml(deskAiError)}</div>` : '';
+        box.innerHTML = msgHtml + loadingHtml + errHtml;
+
+        if (strip) {
+          if (deskAiSending) {
+            strip.classList.add('hidden');
+          } else {
+            strip.classList.remove('hidden');
+            strip.innerHTML = DESK_AI_QUICK_PROMPTS.slice(0, 3).map((q) => `
+              <button type="button" onclick="sendDeskAiMessage(${JSON.stringify(q).replace(/"/g, '&quot;')})" class="px-2 py-1 rounded-md bg-[#0e131e] border border-hairline hover:border-emerald-500/40 text-[10px] font-mono text-slate-400 hover:text-white whitespace-nowrap transition-colors cursor-pointer shrink-0">${escapeQuizHtml(q)}</button>
+            `).join('');
+          }
+        }
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function submitDeskAiForm(event) {
+      if (event) event.preventDefault();
+      const inputEl = document.getElementById('askDeskAiInput');
+      if (!inputEl) return;
+      const val = inputEl.value;
+      inputEl.value = '';
+      sendDeskAiMessage(val);
+    }
+
+    async function sendDeskAiMessage(rawText) {
+      const text = String(rawText || '').trim();
+      if (!text || deskAiSending) return;
+
+      deskAiError = null;
+      const nextHistory = [...deskAiMessages, { role: 'user', text }];
+      deskAiMessages = nextHistory;
+      deskAiSending = true;
+      renderAskDeskAiChat();
+      playTone(560, 'sine', 0.03);
+
+      try {
+        const response = await fetch('/api/ai/desk-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: nextHistory.slice(-20)
+          })
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('Ask RJS Desk AI server endpoint is unavailable.');
+        }
+
+        const payload = await response.json();
+        if (!response.ok || !payload.reply) {
+          throw new Error(payload.error || 'Unable to reach RJS Desk AI right now.');
+        }
+
+        deskAiMessages = [...nextHistory, { role: 'model', text: String(payload.reply).trim() }];
+        playTone(700, 'sine', 0.04);
+      } catch (err) {
+        deskAiError = err?.message || 'Unable to reach RJS Desk AI right now.';
+        playErrorTone();
+      } finally {
+        deskAiSending = false;
+        renderAskDeskAiChat();
+      }
+    }
   </script>
 </body>
 </html>

@@ -12,6 +12,8 @@ export interface StudentSession {
   full_name: string;
   email?: string | null;
   tier: StudentTier | string;
+  currentPhase?: 1 | 2;
+  current_phase?: number | null;
   is_active: boolean;
   unlocked_lessons: string[];
   passcode?: string;
@@ -31,6 +33,7 @@ export interface SupabaseTradeLog {
   outcome: string;
   net_pnl: number;
   notes?: string | null;
+  phase?: number | null;
 }
 
 export type LessonAssignmentStatus = 'pending' | 'approved' | 'revision';
@@ -47,3 +50,51 @@ export interface LessonAssignmentRecord {
   mentor_feedback?: string | null;
 }
 
+export function extractCurrentPhase(unlockedLessons: unknown, explicitCurrentPhase?: unknown): 1 | 2 {
+  const num = Number(explicitCurrentPhase);
+  if (num === 2) return 2;
+  if (num === 1) return 1;
+  if (Array.isArray(unlockedLessons)) {
+    if (unlockedLessons.includes('phase_current_2')) return 2;
+    if (unlockedLessons.includes('phase_current_1')) return 1;
+  }
+  return 1;
+}
+
+export function encodeTradePhaseNote(phase: 1 | 2, cleanNote?: string | null): string | null {
+  const trimmed = String(cleanNote || '').replace(/^\[(PHASE1|PHASE2)\]\s*/i, '').trim();
+  if (phase === 2) {
+    return trimmed ? `[PHASE2] ${trimmed}` : '[PHASE2]';
+  }
+  return trimmed || null;
+}
+
+export function decodeTradePhaseAndNote(
+  rawNotes?: unknown,
+  explicitPhase?: unknown
+): { phase: 1 | 2; note: string } {
+  const raw = typeof rawNotes === 'string' ? rawNotes : '';
+  let phase: 1 | 2 = Number(explicitPhase) === 2 ? 2 : 1;
+  let note = raw;
+
+  if (/^\[PHASE2\]/i.test(raw)) {
+    phase = 2;
+    note = raw.replace(/^\[PHASE2\]\s*/i, '');
+  } else if (/^\[PHASE1\]/i.test(raw)) {
+    if (Number(explicitPhase) !== 2) phase = 1;
+    note = raw.replace(/^\[PHASE1\]\s*/i, '');
+  }
+
+  return { phase, note: note.trim() };
+}
+
+export function extractRrrMultiple(rrr?: string | null): number {
+  const match = /1:(\d+(?:\.\d+)?)/.exec(String(rrr || ''));
+  return match ? Number(match[1]) || 0 : 0;
+}
+
+export function isPhase2SwingWin(trade: { phase?: 1 | 2; pnl: number; rrr?: string }): boolean {
+  if ((trade.phase || 1) !== 2) return false;
+  if (!(trade.pnl > 0)) return false;
+  return trade.pnl >= 4000 || extractRrrMultiple(trade.rrr) >= 4;
+}
